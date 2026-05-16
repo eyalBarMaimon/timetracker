@@ -237,9 +237,9 @@ async function handleDropboxCallback() {
       updateDropboxUI(true);
       await dropboxSync('read');
     } else {
-      setSyncStatus('error', 'Auth failed');
+      setSyncStatus('error', 'Auth failed: ' + (json.error_description || json.error || JSON.stringify(json)));
     }
-  } catch { setSyncStatus('error', 'Auth failed'); }
+  } catch (e) { setSyncStatus('error', 'Auth failed: ' + (e && e.message ? e.message : String(e))); }
 }
 
 async function dropboxSync(mode) {
@@ -280,9 +280,11 @@ async function dropboxSync(mode) {
       data.settings.dropboxConnected = false;
       saveLocal();
       updateDropboxUI(false);
-      setSyncStatus('error', 'Session expired — reconnect Dropbox in Settings');
+      const detail = e.error ? JSON.stringify(e.error) : (e.message || e.status);
+      setSyncStatus('error', 'Session expired (' + detail + ') — reconnect Dropbox in Settings');
     } else {
-      setSyncStatus('error');
+      const detail = e ? (e.message || e.status || JSON.stringify(e)) : 'unknown';
+      setSyncStatus('error', 'Sync error: ' + detail);
       syncPending = true;
     }
   }
