@@ -1,0 +1,12 @@
+{
+  "name": "timetracker",
+  "version": "1.0.0",
+  "description": "Freelance time tracker with Dropbox sync",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4"
+  }
+}

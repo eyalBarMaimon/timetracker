@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>TimeTracker</title>
+<link rel="stylesheet" href="style.css">
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<!-- Dropbox SDK -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dropbox.js/10.34.0/Dropbox-sdk.min.js"></script>
+<!-- jsPDF + html2canvas for PDF export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+
+<!-- ===== SIDEBAR NAV (desktop) ===== -->
+<nav id="sidebar">
+  <div class="sidebar-brand">
+    <span class="brand-icon">⏱</span>
+    <span class="brand-name">TimeTracker</span>
+  </div>
+  <ul class="sidebar-nav">
+    <li><button class="nav-btn active" data-tab="timer">⏱ <span>Timer</span></button></li>
+    <li><button class="nav-btn" data-tab="entries">📋 <span>Entries</span></button></li>
+    <li><button class="nav-btn" data-tab="reports">📊 <span>Reports</span></button></li>
+    <li><button class="nav-btn" data-tab="invoices">🧾 <span>Invoices</span> <span id="invoice-badge-sidebar" class="badge hidden"></span></button></li>
+    <li><button class="nav-btn" data-tab="settings">⚙ <span>Settings</span></button></li>
+  </ul>
+  <div id="sync-status" class="sync-status">✓ Synced</div>
+  <button id="exit-btn" class="exit-btn" title="Exit app">✕ Exit</button>
+</nav>
+
+<!-- Mobile exit button (top-right corner) -->
+<button id="exit-btn-mobile" class="exit-btn-mobile" title="Exit app">✕</button>
+
+<!-- ===== MAIN CONTENT ===== -->
+<main id="main">
+
+  <!-- ====== TIMER TAB ====== -->
+  <section id="tab-timer" class="tab-panel active">
+    <div class="tab-header">
+      <h1>Timer</h1>
+      <div class="segmented-toggle">
+        <button class="seg-btn active" data-seg="list">List</button>
+        <button class="seg-btn disabled" data-seg="pomodoro">Pomodoro</button>
+      </div>
+    </div>
+
+    <!-- Favorites bar -->
+    <div id="favorites-bar" class="favorites-bar">
+      <button id="add-fav-btn" class="fav-chip fav-add">+ Favorite</button>
+    </div>
+
+    <!-- Entry list by date -->
+    <div id="timer-entries-list" class="entries-list"></div>
+
+    <!-- Running / Start bar at bottom -->
+    <div id="start-bar" class="start-bar">
+      <div class="start-bar-inputs">
+        <input id="timer-note" type="text" placeholder="I'm working on…" autocomplete="off">
+        <div class="start-bar-meta">
+          <button id="timer-project-btn" class="chip-btn">📁 Select project</button>
+          <button id="timer-billable-btn" class="chip-btn billable-off" title="Toggle billable">$ Billable</button>
+        </div>
+      </div>
+      <button id="start-stop-btn" class="start-stop-btn">▶ START</button>
+    </div>
+
+    <!-- Running timer display (visible when timer running) -->
+    <div id="running-bar" class="running-bar hidden">
+      <div class="running-info">
+        <span id="running-note-display" class="running-note">No description</span>
+        <span id="running-project-display" class="running-project">—</span>
+      </div>
+      <div class="running-time" id="running-display">00:00:00</div>
+      <button id="stop-btn" class="stop-btn">■ STOP</button>
+    </div>
+  </section>
+
+  <!-- ====== ENTRIES TAB ====== -->
+  <section id="tab-entries" class="tab-panel">
+    <div class="tab-header">
+      <h1>Entries</h1>
+      <button id="add-entry-btn" class="btn-primary">+ Add Entry</button>
+    </div>
+    <div class="filter-row">
+      <input id="entries-search" type="text" placeholder="Search…" class="search-input">
+      <select id="entries-filter-client" class="filter-select">
+        <option value="">All Clients</option>
+      </select>
+      <select id="entries-filter-project" class="filter-select">
+        <option value="">All Projects</option>
+      </select>
+    </div>
+    <div id="entries-list" class="entries-list"></div>
+  </section>
+
+  <!-- ====== REPORTS TAB ====== -->
+  <section id="tab-reports" class="tab-panel">
+    <div class="tab-header">
+      <h1>Reports</h1>
+      <div class="report-actions">
+        <button id="new-invoice-btn" class="btn-secondary">🧾 New Invoice</button>
+        <button id="export-pdf-btn" class="btn-secondary">↓ PDF</button>
+        <button id="export-csv-btn" class="btn-secondary">↓ CSV</button>
+      </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Hours</div>
+        <div class="kpi-value" id="kpi-total">00:00:00</div>
+      </div>
+      <div class="kpi-card accent">
+        <div class="kpi-label">Billable Hours</div>
+        <div class="kpi-value" id="kpi-billable">00:00:00</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Amount</div>
+        <div class="kpi-value" id="kpi-amount">₪ 0</div>
+      </div>
+    </div>
+
+    <!-- Date Range Filter -->
+    <div class="date-filter-row">
+      <div class="preset-btns">
+        <button class="preset-btn" data-preset="today">Today</button>
+        <button class="preset-btn" data-preset="week">This Week</button>
+        <button class="preset-btn active" data-preset="month">This Month</button>
+        <button class="preset-btn" data-preset="last-month">Last Month</button>
+        <button class="preset-btn" data-preset="custom">Custom</button>
+      </div>
+      <div id="custom-range" class="custom-range hidden">
+        <input type="date" id="range-start" class="date-input">
+        <span>→</span>
+        <input type="date" id="range-end" class="date-input">
+      </div>
+      <div class="filter-selects">
+        <select id="report-client-filter" class="filter-select">
+          <option value="">All Clients</option>
+        </select>
+        <select id="report-project-filter" class="filter-select">
+          <option value="">All Projects</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Bar Chart -->
+    <div class="chart-card" id="reports-chart-section">
+      <h3>Daily Hours</h3>
+      <div class="chart-container">
+        <canvas id="daily-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Project Breakdown -->
+    <div class="breakdown-grid">
+      <div class="chart-card donut-card">
+        <h3>By Project</h3>
+        <div class="chart-container-sm">
+          <canvas id="donut-chart"></canvas>
+        </div>
+      </div>
+      <div class="chart-card table-card">
+        <table id="project-table" class="data-table">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Hours</th>
+              <th>Amount</th>
+              <th>Expenses</th>
+              <th>Total</th>
+              <th>%</th>
+            </tr>
+          </thead>
+          <tbody id="project-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Description Breakdown -->
+    <div class="chart-card">
+      <h3>By Description</h3>
+      <table id="desc-table" class="data-table">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>Duration</th>
+            <th>Amount</th>
+            <th>%</th>
+          </tr>
+        </thead>
+        <tbody id="desc-table-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ====== INVOICES TAB ====== -->
+  <section id="tab-invoices" class="tab-panel">
+    <div class="tab-header">
+      <h1>Invoices <span id="invoice-badge-title" class="badge hidden"></span></h1>
+    </div>
+    <div class="filter-row">
+      <div class="preset-btns">
+        <button class="inv-filter-btn active" data-filter="all">All</button>
+        <button class="inv-filter-btn" data-filter="draft">Draft</button>
+        <button class="inv-filter-btn" data-filter="sent">Unpaid</button>
+        <button class="inv-filter-btn" data-filter="paid">Paid</button>
+      </div>
+    </div>
+    <div id="invoices-list" class="invoices-list"></div>
+  </section>
+
+  <!-- ====== SETTINGS TAB ====== -->
+  <section id="tab-settings" class="tab-panel">
+    <div class="tab-header"><h1>Settings</h1></div>
+
+    <!-- Dropbox -->
+    <div class="settings-section">
+      <h2>Dropbox Sync</h2>
+      <div class="settings-row">
+        <label>App Key</label>
+        <input id="dropbox-app-key" type="text" placeholder="Paste Dropbox App Key…" class="settings-input">
+      </div>
+      <div class="settings-row">
+        <button id="dropbox-connect-btn" class="btn-primary">Connect Dropbox</button>
+        <button id="dropbox-disconnect-btn" class="btn-danger hidden">Disconnect</button>
+        <button id="dropbox-sync-now-btn" class="btn-secondary hidden">⟳ Sync Now</button>
+        <span id="dropbox-status" class="status-text"></span>
+      </div>
+      <div class="settings-hint">
+        1. Go to <strong>dropbox.com/developers/apps</strong> → Create app → Scoped access → App folder<br>
+        2. Name it anything (e.g. <em>TimeTracker</em>)<br>
+        3. Under <strong>OAuth 2</strong>, add Redirect URI: <code id="redirect-uri-display"></code><br>
+        4. Copy the <strong>App key</strong> (short ~15-char code) — <em>not</em> the App secret — and paste it above
+      </div>
+    </div>
+
+    <!-- Currency -->
+    <div class="settings-section">
+      <h2>Currency</h2>
+      <div class="settings-row">
+        <label>Base / Billing Currency</label>
+        <select id="base-currency" class="settings-select"></select>
+      </div>
+      <div class="settings-row">
+        <label>Display Currency</label>
+        <select id="display-currency" class="settings-select"></select>
+      </div>
+      <div class="settings-row">
+        <label>FX Markup % <span class="hint">(0–10%)</span></label>
+        <input id="fx-markup" type="range" min="0" max="10" step="0.5" value="4" class="range-input">
+        <span id="fx-markup-val">4%</span>
+      </div>
+      <div class="settings-row">
+        <span class="label">Rate Source</span>
+        <span class="value">Frankfurter ECB midpoint</span>
+      </div>
+      <div class="settings-row">
+        <span class="label">Last rate fetch</span>
+        <span id="last-rate-fetch" class="value">—</span>
+      </div>
+    </div>
+
+    <!-- Week -->
+    <div class="settings-section">
+      <h2>Calendar</h2>
+      <div class="settings-row">
+        <label>Week starts on</label>
+        <select id="week-start" class="settings-select">
+          <option value="sunday">Sunday</option>
+          <option value="monday">Monday</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Clients -->
+    <div class="settings-section">
+      <h2>Clients</h2>
+      <div id="clients-list" class="crud-list"></div>
+      <button id="add-client-btn" class="btn-secondary">+ Add Client</button>
+    </div>
+
+    <!-- Projects -->
+    <div class="settings-section">
+      <h2>Projects</h2>
+      <div id="projects-list" class="crud-list"></div>
+      <button id="add-project-btn" class="btn-secondary">+ Add Project</button>
+    </div>
+
+    <!-- Import -->
+    <div class="settings-section">
+      <h2>Import</h2>
+      <div class="settings-row">
+        <button id="load-data-file-btn" class="btn-primary">📥 Load timetracker data.json</button>
+        <input id="load-data-file-input" type="file" accept=".json" class="hidden">
+        <span id="load-data-status" class="status-text"></span>
+      </div>
+      <div class="settings-row">
+        <button id="import-toggl-btn" class="btn-secondary">↑ Import from Toggl CSV</button>
+        <input id="toggl-csv-input" type="file" accept=".csv" class="hidden">
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ===== BOTTOM NAV (mobile) ===== -->
+<nav id="bottom-nav">
+  <button class="nav-btn active" data-tab="timer">⏱<span>Timer</span></button>
+  <button class="nav-btn" data-tab="entries">📋<span>Entries</span></button>
+  <button class="nav-btn" data-tab="reports">📊<span>Reports</span></button>
+  <button class="nav-btn" data-tab="invoices">🧾<span>Invoices <span id="invoice-badge-bottom" class="badge hidden"></span></span></button>
+  <button class="nav-btn" data-tab="settings">⚙<span>Settings</span></button>
+</nav>
+
+<!-- ===== MODALS ===== -->
+
+<!-- Entry Edit Modal -->
+<div id="modal-entry" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <button class="modal-cancel" data-close="modal-entry">✕</button>
+      <h2 id="entry-modal-title">Edit Entry</h2>
+      <button id="entry-save-btn" class="modal-save">✓</button>
+    </div>
+    <div class="modal-body">
+      <div class="duration-display" id="entry-duration-display">0:00:00</div>
+      <div class="form-group">
+        <label>Description</label>
+        <input id="entry-note" type="text" placeholder="I'm working on…" class="form-input">
+      </div>
+      <div class="form-group">
+        <label>Project</label>
+        <select id="entry-project" class="form-select"></select>
+      </div>
+      <div class="form-group form-row">
+        <div>
+          <label>Start</label>
+          <input id="entry-start" type="datetime-local" class="form-input">
+        </div>
+        <div>
+          <label>End</label>
+          <input id="entry-end" type="datetime-local" class="form-input">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input id="entry-date" type="date" class="form-input">
+      </div>
+      <div class="form-group form-check">
+        <label class="check-label">
+          <input id="entry-billable" type="checkbox" checked>
+          Billable
+        </label>
+      </div>
+      <div class="form-group">
+        <label>Tags (comma-separated)</label>
+        <input id="entry-tags" type="text" placeholder="tag1, tag2" class="form-input">
+      </div>
+      <div id="entry-fx-info" class="fx-info hidden"></div>
+    </div>
+    <div class="modal-footer">
+      <button id="entry-delete-btn" class="btn-danger hidden">Delete Entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- Expense Modal -->
+<div id="modal-expense" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <button class="modal-cancel" data-close="modal-expense">✕</button>
+      <h2 id="expense-modal-title">Add Expense</h2>
+      <button id="expense-save-btn" class="modal-save">✓</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Date</label>
+        <input id="expense-date" type="date" class="form-input">
+      </div>
+      <div class="form-group">
+        <label>Project</label>
+        <select id="expense-project" class="form-select"></select>
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select id="expense-category" class="form-select">
+          <option value="travel">✈ Travel</option>
+          <option value="software">💻 Software / SaaS</option>
+          <option value="hardware">🖥 Hardware</option>
+          <option value="hosting">☁ Hosting</option>
+          <option value="food">🍔 Food</option>
+          <option value="accommodation">🏨 Accommodation</option>
+          <option value="phone">📱 Phone</option>
+          <option value="other">📦 Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <input id="expense-desc" type="text" placeholder="e.g. Train Tel Aviv → Haifa" class="form-input">
+      </div>
+      <div class="form-group form-row">
+        <div>
+          <label>Amount</label>
+          <input id="expense-amount" type="number" step="0.01" min="0" placeholder="0.00" class="form-input">
+        </div>
+        <div>
+          <label>Currency</label>
+          <select id="expense-currency" class="form-select"></select>
+        </div>
+      </div>
+      <div class="form-group form-check">
+        <label class="check-label">
+          <input id="expense-billable" type="checkbox" checked>
+          Billable (pass-through to client)
+        </label>
+      </div>
+      <div class="form-group">
+        <label>Receipt (optional)</label>
+        <input id="expense-receipt" type="file" accept="image/*,.pdf" class="form-input">
+        <div id="expense-receipt-preview" class="receipt-preview hidden"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="expense-delete-btn" class="btn-danger hidden">Delete Expense</button>
+    </div>
+  </div>
+</div>
+
+<!-- Client Modal -->
+<div id="modal-client" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-sheet modal-sm">
+    <div class="modal-header">
+      <button class="modal-cancel" data-close="modal-client">✕</button>
+      <h2>Client</h2>
+      <button id="client-save-btn" class="modal-save">✓</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Name</label>
+        <input id="client-name" type="text" placeholder="Client name" class="form-input">
+      </div>
+      <div class="form-group form-row">
+        <div>
+          <label>Hourly Rate</label>
+          <input id="client-rate" type="number" step="0.01" min="0" placeholder="0.00" class="form-input">
+        </div>
+        <div>
+          <label>Currency</label>
+          <select id="client-currency" class="form-select"></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Color</label>
+        <input id="client-color" type="color" value="#4f8ef7" class="color-input">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="client-delete-btn" class="btn-danger hidden">Delete Client</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project Modal -->
+<div id="modal-project" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-sheet modal-sm">
+    <div class="modal-header">
+      <button class="modal-cancel" data-close="modal-project">✕</button>
+      <h2>Project</h2>
+      <button id="project-save-btn" class="modal-save">✓</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Name</label>
+        <input id="project-name" type="text" placeholder="Project name" class="form-input">
+      </div>
+      <div class="form-group">
+        <label>Client</label>
+        <select id="project-client" class="form-select"></select>
+      </div>
+      <div class="form-group">
+        <label>Color</label>
+        <input id="project-color" type="color" value="#4f8ef7" class="color-input">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="project-delete-btn" class="btn-danger hidden">Delete Project</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project Picker Modal (for Timer) -->
+<div id="modal-project-picker" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-sheet modal-sm">
+    <div class="modal-header">
+      <button class="modal-cancel" data-close="modal-project-picker">✕</button>
+      <h2>Select Project</h2>
+    </div>
+    <div class="modal-body">
+      <input id="project-search" type="text" placeholder="Search projects…" class="form-input">
+      <div id="project-picker-list" class="picker-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Invoice Create Modal -->
+<div id="modal-invoice" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <button class="modal-cancel" data-close="modal-invoice">✕</button>
+      <h2>New Invoice</h2>
+      <button id="invoice-create-btn" class="modal-save">✓</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Client</label>
+        <select id="invoice-client" class="form-select"></select>
+      </div>
+      <div class="form-group form-check">
+        <label class="check-label">
+          <input id="invoice-select-all" type="checkbox" checked>
+          Select all uninvoiced entries
+        </label>
+      </div>
+      <div id="invoice-items-list" class="invoice-items-list"></div>
+      <div id="invoice-preview-total" class="invoice-preview-total"></div>
+      <div class="form-group">
+        <label>Note (optional)</label>
+        <textarea id="invoice-note" class="form-input" rows="2"></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Invoice Detail Modal -->
+<div id="modal-invoice-detail" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <button class="modal-cancel" data-close="modal-invoice-detail">✕</button>
+      <h2 id="invoice-detail-number">Invoice</h2>
+      <div class="modal-header-actions">
+        <button id="invoice-mark-paid-btn" class="btn-success hidden">✓ Mark Paid</button>
+        <button id="invoice-delete-btn-detail" class="btn-danger">Delete</button>
+      </div>
+    </div>
+    <div class="modal-body" id="invoice-detail-body"></div>
+  </div>
+</div>
+
+<!-- Import Preview Modal -->
+<div id="modal-import" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <button class="modal-cancel" data-close="modal-import">✕</button>
+      <h2>Import from Toggl CSV</h2>
+      <button id="import-confirm-btn" class="modal-save">Import</button>
+    </div>
+    <div class="modal-body">
+      <div id="import-summary" class="import-summary"></div>
+      <div id="import-preview-list" class="import-preview-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Expense shortcut (floating, visible on Timer/Entries tabs) -->
+<button id="fab-expense" class="fab hidden" title="Add Expense">🧾+</button>
+
+<script src="app.js"></script>
+</body>
+</html>
