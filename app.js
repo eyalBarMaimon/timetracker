@@ -190,7 +190,7 @@ function dropboxOAuth() {
   data.settings.dropboxAppKey = key;
   saveLocal();
 
-  const redirectUri = location.origin;
+  const redirectUri = location.origin + location.pathname.replace(/\/+$/, '');
   const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = verifier; // plain PKCE (no SHA-256 needed for App folder apps)
   localStorage.setItem('dropbox_verifier', verifier);
@@ -214,7 +214,7 @@ async function handleDropboxCallback() {
 
   const key = data.settings.dropboxAppKey;
   const verifier = localStorage.getItem('dropbox_verifier');
-  const redirectUri = location.origin;
+  const redirectUri = location.origin + location.pathname.replace(/\/+$/, '');
 
   try {
     const resp = await fetch('https://api.dropboxapi.com/oauth2/token', {
