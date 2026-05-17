@@ -309,8 +309,7 @@ function updateDropboxUI(connected) {
 
 // ── Navigation ───────────────────────────────────────────────────────────────
 function updateFabVisibility() {
-  const show = currentTab === 'timer' || currentTab === 'entries';
-  document.getElementById('fab-expense').classList.toggle('hidden', !show);
+  document.getElementById('fab-expense').classList.toggle('hidden', currentTab !== 'entries');
 }
 
 function switchTab(tab) {
