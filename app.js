@@ -11,6 +11,7 @@ const DEFAULT_DATA = {
   }
 };
 
+const APP_VERSION = '1.0.0';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -307,6 +308,11 @@ function updateDropboxUI(connected) {
 }
 
 // ── Navigation ───────────────────────────────────────────────────────────────
+function updateFabVisibility() {
+  const show = currentTab === 'timer' || currentTab === 'entries';
+  document.getElementById('fab-expense').classList.toggle('hidden', !show);
+}
+
 function switchTab(tab) {
   currentTab = tab;
   document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
@@ -314,7 +320,7 @@ function switchTab(tab) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
-  document.getElementById('fab-expense').classList.toggle('hidden', tab !== 'timer' && tab !== 'entries');
+  updateFabVisibility();
 
   if (tab === 'reports') renderReports();
   if (tab === 'invoices') renderInvoices();
@@ -1667,6 +1673,7 @@ function renderAll() {
   if (currentTab === 'reports') renderReports();
   if (currentTab === 'invoices') renderInvoices();
   updateInvoiceBadges();
+  updateFabVisibility();
 }
 
 function updateInvoiceBadges() {
@@ -1914,6 +1921,7 @@ async function init() {
   renderAll();
   renderSettings();
   populateFilterDropdowns();
+  document.querySelectorAll('.app-version-label').forEach(el => el.textContent = 'v' + APP_VERSION);
 
   // Fetch FX rates on load
   if (data.settings.baseCurrency) {

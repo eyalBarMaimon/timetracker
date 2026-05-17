@@ -20,6 +20,7 @@
   <div class="sidebar-brand">
     <span class="brand-icon">⏱</span>
     <span class="brand-name">TimeTracker</span>
+    <span class="app-version-label brand-version"></span>
   </div>
   <ul class="sidebar-nav">
     <li><button class="nav-btn active" data-tab="timer">⏱ <span>Timer</span></button></li>
@@ -300,17 +301,19 @@
         <input id="toggl-csv-input" type="file" accept=".csv" class="hidden">
       </div>
     </div>
+
+    <div class="settings-version">TimeTracker <span class="app-version-label"></span></div>
   </section>
 
 </main>
 
 <!-- ===== BOTTOM NAV (mobile) ===== -->
 <nav id="bottom-nav">
-  <button class="nav-btn active" data-tab="timer">⏱<span>Timer</span></button>
-  <button class="nav-btn" data-tab="entries">📋<span>Entries</span></button>
-  <button class="nav-btn" data-tab="reports">📊<span>Reports</span></button>
-  <button class="nav-btn" data-tab="invoices">🧾<span>Invoices <span id="invoice-badge-bottom" class="badge hidden"></span></span></button>
-  <button class="nav-btn" data-tab="settings">⚙<span>Settings</span></button>
+  <button class="nav-btn active" data-tab="timer"><span class="nav-icon">⏱</span><span>Timer</span></button>
+  <button class="nav-btn" data-tab="entries"><span class="nav-icon">📋</span><span>Entries</span></button>
+  <button class="nav-btn" data-tab="reports"><span class="nav-icon">📊</span><span>Reports</span></button>
+  <button class="nav-btn" data-tab="invoices"><span class="nav-icon">🧾</span><span>Invoices <span id="invoice-badge-bottom" class="badge hidden"></span></span></button>
+  <button class="nav-btn" data-tab="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
 </nav>
 
 <!-- ===== MODALS ===== -->

@@ -79,6 +79,7 @@ html, body {
   color: var(--accent);
 }
 .brand-icon { font-size: 24px; }
+.brand-version { font-size: 11px; font-weight: 400; color: var(--text3); margin-left: -4px; }
 .sidebar-nav { list-style: none; flex: 1; }
 .sidebar-nav li { width: 100%; }
 .sidebar-nav .nav-btn {
@@ -170,6 +171,7 @@ html, body {
   transition: color 0.15s;
 }
 #bottom-nav .nav-btn span { font-size: 10px; }
+#bottom-nav .nav-btn .nav-icon { font-size: 22px; line-height: 1; }
 #bottom-nav .nav-btn.active { color: var(--accent); }
 
 /* ===== TAB PANELS ===== */
@@ -188,6 +190,10 @@ html, body {
   margin-bottom: 16px;
   flex-wrap: wrap;
   gap: 8px;
+  padding-right: 48px;
+}
+@media (min-width: 768px) {
+  .tab-header { padding-right: 0; }
 }
 .tab-header h1 {
   font-size: 28px;
@@ -615,6 +621,12 @@ html, body {
   border-radius: var(--radius);
   padding: 16px;
   margin-bottom: 16px;
+}
+.settings-version {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text3);
+  padding: 8px 0 4px;
 }
 .settings-section h2 { font-size: 16px; font-weight: 600; margin-bottom: 14px; color: var(--text); }
 .settings-row {
