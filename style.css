@@ -1018,3 +1018,66 @@ input[type="date"], input[type="datetime-local"] { color-scheme: dark; }
   font-size: 14px;
 }
 .empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; }
+
+/* ===== MOBILE LAYOUT FIXES ===== */
+@media (max-width: 480px) {
+  /* Settings rows: stack label above input */
+  .settings-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .settings-row label {
+    min-width: auto;
+  }
+  .settings-input,
+  .settings-select {
+    min-width: auto;
+    width: 100%;
+  }
+
+  /* Reports: date filter stacks vertically */
+  .date-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filter-selects {
+    flex-direction: column;
+  }
+  .filter-select {
+    width: 100%;
+  }
+
+  /* Reports: tab header buttons wrap cleanly */
+  .report-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* Modal form-row: stack start/end fields on small screens */
+  .form-row {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* Tables: horizontal scroll container on mobile */
+  .chart-card {
+    overflow-x: auto;
+  }
+  .data-table {
+    min-width: 360px;
+  }
+
+  /* Invoice row: wrap amount/status to second line */
+  .invoice-row {
+    flex-wrap: wrap;
+  }
+  .invoice-client {
+    flex-basis: 100%;
+    order: 3;
+  }
+
+  /* KPI value font size smaller on very narrow screens */
+  .kpi-value {
+    font-size: 18px;
+  }
+}
