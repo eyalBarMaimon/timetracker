@@ -4,15 +4,15 @@ Freelance time tracker with Dropbox sync. Tracks hours per project and client, g
 
 ## Live App
 
-**https://ebmtimetracker.netlify.app** — works on phone and desktop.
+**https://eyalbarmaimon.github.io/timetracker/** — works on phone and desktop.
 
 ---
 
 ## Quick Start
 
-### Option A — Netlify (recommended, works from anywhere)
+### Option A — GitHub Pages (recommended, works from anywhere)
 
-Open **https://ebmtimetracker.netlify.app** in any browser. No install needed.
+Open **https://eyalbarmaimon.github.io/timetracker/** in any browser. No install needed.
 
 ### Option B — Local server (same Wi-Fi only)
 
@@ -30,11 +30,11 @@ npm start
 1. Go to https://www.dropbox.com/developers/apps
 2. **Create app** → Scoped access → App folder → Name it `TimeTracker`
 3. Under **OAuth 2 → Redirect URIs**, add:
-   - `https://ebmtimetracker.netlify.app` (for Netlify)
+   - `https://eyalbarmaimon.github.io/timetracker/` (with trailing slash)
    - `http://localhost:3000` (for local server, optional)
 4. Copy the **App Key** (short ~15-char code — not the secret)
 5. In the app → **Settings** → paste the App Key → **Connect Dropbox**
-6. Authorize once — data syncs to `/Apps/TimeTracker/timetracker_data.json`
+6. Authorize once — data syncs to `/ClaudeCode/Time Track/timetracker_data.json`
 
 ---
 
@@ -50,11 +50,17 @@ Data syncs automatically between phone and desktop:
 
 ---
 
-## Deploy to Netlify
+## Deploy (GitHub Pages)
 
-When you make code changes locally, redeploy by dragging the `timetracker/` folder (just `index.html`, `app.js`, `style.css`) to **app.netlify.com → your site → Deploys**.
+Push changes to `main` branch — GitHub Pages deploys automatically within ~1 minute.
 
-Do **not** include `node_modules/`, `server.js`, `package.json` — those are for local use only.
+```bash
+git add app.js index.html style.css
+git commit -m "v1.x.x: description"
+git push origin main
+```
+
+Remember to bump `APP_VERSION` in `app.js` (line 14) with every push.
 
 ---
 
@@ -75,7 +81,7 @@ Do **not** include `node_modules/`, `server.js`, `package.json` — those are fo
 
 ## Data Model
 
-All data stored in `timetracker_data.json` in your Dropbox App folder, and cached in `localStorage` as fallback.
+All data stored in `timetracker_data.json` at `/ClaudeCode/Time Track/` in Dropbox, and cached in `localStorage` as fallback.
 
 - **Clients** hold the hourly rate and currency (not projects)
 - **Projects** belong to one client
