@@ -11,7 +11,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.0.3';
+const APP_VERSION = '1.0.4';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -248,7 +248,7 @@ async function dropboxSync(mode) {
   setSyncStatus('loading');
   try {
     if (mode === 'read') {
-      const resp = await dropboxClient.filesDownload({ path: '/timetracker_data.json' });
+      const resp = await dropboxClient.filesDownload({ path: '/ClaudeCode/timetracker_data.json' });
       const text = await resp.result.fileBlob.text();
       const remote = JSON.parse(text);
       data = Object.assign(JSON.parse(JSON.stringify(DEFAULT_DATA)), remote);
@@ -258,7 +258,7 @@ async function dropboxSync(mode) {
     } else {
       const content = JSON.stringify(data, null, 2);
       await dropboxClient.filesUpload({
-        path: '/timetracker_data.json',
+        path: '/ClaudeCode/timetracker_data.json',
         contents: content,
         mode: { '.tag': 'overwrite' }
       });
@@ -269,7 +269,7 @@ async function dropboxSync(mode) {
       // File not found — create it
       try {
         const content = JSON.stringify(data, null, 2);
-        await dropboxClient.filesUpload({ path: '/timetracker_data.json', contents: content, mode: { '.tag': 'add' } });
+        await dropboxClient.filesUpload({ path: '/ClaudeCode/timetracker_data.json', contents: content, mode: { '.tag': 'add' } });
         setSyncStatus('ok');
       } catch { setSyncStatus('error'); }
     } else if (e && (e.status === 401 || e.status === 400)) {
