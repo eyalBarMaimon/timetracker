@@ -34,7 +34,7 @@ npm start
    - `http://localhost:3000` (for local server, optional)
 4. Copy the **App Key** (short ~15-char code — not the secret)
 5. In the app → **Settings** → paste the App Key → **Connect Dropbox**
-6. Authorize once — data syncs to `/ClaudeCode/Time Track/timetracker_data.json`
+6. Authorize once — data syncs to `/timetracker_data.json` (root of your Dropbox)
 
 ---
 
@@ -81,7 +81,7 @@ Remember to bump `APP_VERSION` in `app.js` (line 14) with every push.
 
 ## Data Model
 
-All data stored in `timetracker_data.json` at `/ClaudeCode/Time Track/` in Dropbox, and cached in `localStorage` as fallback.
+All data stored in `timetracker_data.json` at the root of your Dropbox (`E:\Dropbox\timetracker_data.json` locally), and cached in `localStorage` as fallback.
 
 - **Clients** hold the hourly rate and currency (not projects)
 - **Projects** belong to one client
