@@ -11,7 +11,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.0.5';
+const APP_VERSION = '1.0.6';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -59,7 +59,7 @@ function currSym(c) { return CURRENCY_SYMBOLS[c] || c; }
 
 function fmtMoney(amount, currency) {
   if (!amount && amount !== 0) return '—';
-  return `${currSym(currency)} ${amount.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
+  return `${currSym(currency)} ${Math.round(amount).toLocaleString('en-US')}`;
 }
 
 function getProject(id) { return data.projects.find(p => p.id === id); }
