@@ -532,8 +532,11 @@ html, body {
   grid-template-columns: 240px 1fr;
   gap: 16px;
   margin-bottom: 16px;
+  min-width: 0;
 }
-@media (max-width: 600px) { .breakdown-grid { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .breakdown-grid { grid-template-columns: 1fr; } }
+
+.table-card { overflow-x: auto; min-width: 0; }
 
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .data-table th {
