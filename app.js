@@ -11,7 +11,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.0.6';
+const APP_VERSION = '1.0.7';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -52,8 +52,21 @@ function toDatetimeLocal(iso) { return iso ? iso.slice(0, 16) : ''; }
 function fromDatetimeLocal(val) { return val ? val + ':00' : ''; }
 
 function fmtDate(iso) {
-  const d = new Date(iso + 'T00:00:00');
-  return d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+  if (!iso) return '';
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function parseDMY(str) {
+  // accepts DD/MM/YYYY → YYYY-MM-DD, or pass-through YYYY-MM-DD
+  if (!str) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  const parts = str.split('/');
+  if (parts.length === 3) {
+    const [dd, mm, yyyy] = parts;
+    if (dd && mm && yyyy && yyyy.length === 4) return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
+  }
+  return '';
 }
 function currSym(c) { return CURRENCY_SYMBOLS[c] || c; }
 
@@ -970,7 +983,7 @@ function renderDailyChart(entries, start, end) {
   for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
     const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     dayKeys.push(ds);
-    dayLabels.push(d.toLocaleDateString('en-US', { month:'numeric', day:'numeric' }));
+    dayLabels.push(`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`);
   }
 
   // One dataset per project that appears in the filtered entries
@@ -1774,11 +1787,22 @@ function bindEvents() {
       renderReports();
     });
   });
-  document.getElementById('range-start').addEventListener('change', e => {
-    reportRange.start = e.target.value; renderReports();
+  function autoSlashDate(e) {
+    let v = e.target.value.replace(/[^\d]/g, '');
+    if (v.length > 2) v = v.slice(0,2) + '/' + v.slice(2);
+    if (v.length > 5) v = v.slice(0,5) + '/' + v.slice(5);
+    if (v.length > 10) v = v.slice(0,10);
+    e.target.value = v;
+    const iso = parseDMY(v);
+    return iso;
+  }
+  document.getElementById('range-start').addEventListener('input', e => {
+    const iso = autoSlashDate(e);
+    if (iso) { reportRange.start = iso; renderReports(); }
   });
-  document.getElementById('range-end').addEventListener('change', e => {
-    reportRange.end = e.target.value; renderReports();
+  document.getElementById('range-end').addEventListener('input', e => {
+    const iso = autoSlashDate(e);
+    if (iso) { reportRange.end = iso; renderReports(); }
   });
   document.getElementById('report-client-filter').addEventListener('change', e => {
     reportFilters.client = e.target.value; renderReports();
