@@ -131,10 +131,11 @@
         <button class="preset-btn" data-preset="custom">Custom</button>
       </div>
       <div id="custom-range" class="custom-range hidden">
-        <input type="text" id="range-start" class="date-input" placeholder="DD/MM/YYYY" maxlength="10">
-        <span>→</span>
-        <input type="text" id="range-end" class="date-input" placeholder="DD/MM/YYYY" maxlength="10">
+        <button id="range-start" class="date-btn">מ-תאריך</button>
+        <span class="range-arrow">→</span>
+        <button id="range-end" class="date-btn">עד-תאריך</button>
       </div>
+      <div id="mini-date-picker" class="mini-date-picker hidden"></div>
       <div class="filter-selects">
         <select id="report-client-filter" class="filter-select">
           <option value="">All Clients</option>

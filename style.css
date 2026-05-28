@@ -1084,3 +1084,87 @@ input[type="date"], input[type="datetime-local"] { color-scheme: dark; }
     font-size: 18px;
   }
 }
+
+/* ── Mini Date Picker ── */
+.date-btn {
+  padding: 6px 12px;
+  background: var(--bg3);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 90px;
+  transition: border-color 0.15s;
+}
+.date-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.range-arrow { color: var(--text3); padding: 0 4px; }
+
+.mini-date-picker {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  width: 260px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.mini-date-picker.hidden { display: none; }
+
+.dp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.dp-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.dp-nav {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 6px;
+  line-height: 1;
+}
+.dp-nav:hover { color: var(--text); }
+
+.dp-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.dp-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text);
+  transition: background 0.1s;
+}
+.dp-cell:empty { cursor: default; }
+.dp-hdr { color: var(--text3); font-size: 11px; cursor: default; font-weight: 600; }
+.dp-day:hover { background: var(--bg3); }
+.dp-today { border: 1px solid var(--accent2); color: var(--accent2); }
+.dp-sel { background: var(--accent) !important; color: #fff !important; font-weight: 700; }
+.dp-range { background: rgba(249,115,22,0.18); }
+
+.dp-footer {
+  margin-top: 10px;
+  text-align: center;
+}
+.dp-close {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text2);
+  border-radius: 6px;
+  padding: 4px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.dp-close:hover { border-color: var(--danger); color: var(--danger); }

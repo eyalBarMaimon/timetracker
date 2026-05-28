@@ -11,7 +11,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.0.7';
+const APP_VERSION = '1.0.8';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -57,16 +57,85 @@ function fmtDate(iso) {
   return `${d}/${m}/${y}`;
 }
 
-function parseDMY(str) {
-  // accepts DD/MM/YYYY → YYYY-MM-DD, or pass-through YYYY-MM-DD
-  if (!str) return '';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-  const parts = str.split('/');
-  if (parts.length === 3) {
-    const [dd, mm, yyyy] = parts;
-    if (dd && mm && yyyy && yyyy.length === 4) return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
+// ── Mini Date Picker ──────────────────────────────────────────────────────────
+let _pickerTarget = null; // 'start' | 'end'
+let _pickerYear = 0;
+let _pickerMonth = 0;
+
+function openDatePicker(target) {
+  _pickerTarget = target;
+  const iso = target === 'start' ? reportRange.start : reportRange.end;
+  const ref = iso ? new Date(iso + 'T00:00:00') : new Date();
+  _pickerYear = ref.getFullYear();
+  _pickerMonth = ref.getMonth();
+  renderDatePicker();
+  const picker = document.getElementById('mini-date-picker');
+  picker.classList.remove('hidden');
+  const btn = document.getElementById('range-' + target);
+  const r = btn.getBoundingClientRect();
+  picker.style.top = (r.bottom + 6) + 'px';
+  picker.style.left = r.left + 'px';
+}
+
+function closeDatePicker() {
+  document.getElementById('mini-date-picker').classList.add('hidden');
+  _pickerTarget = null;
+}
+
+function renderDatePicker() {
+  const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+  const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
+  const today = new Date().toISOString().slice(0, 10);
+  const selStart = reportRange.start;
+  const selEnd   = reportRange.end;
+
+  const first = new Date(_pickerYear, _pickerMonth, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(_pickerYear, _pickerMonth + 1, 0).getDate();
+
+  let cells = '';
+  // day-of-week headers (Sun first)
+  DAYS.forEach(d => { cells += `<div class="dp-cell dp-hdr">${d}</div>`; });
+  // blank cells before first
+  for (let i = 0; i < first; i++) cells += `<div class="dp-cell"></div>`;
+  // day cells
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = `${_pickerYear}-${String(_pickerMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    let cls = 'dp-cell dp-day';
+    if (iso === today) cls += ' dp-today';
+    if (iso === selStart || iso === selEnd) cls += ' dp-sel';
+    else if (selStart && selEnd && iso > selStart && iso < selEnd) cls += ' dp-range';
+    cells += `<div class="${cls}" data-iso="${iso}">${d}</div>`;
   }
-  return '';
+
+  document.getElementById('mini-date-picker').innerHTML = `
+    <div class="dp-header">
+      <button class="dp-nav" id="dp-prev">‹</button>
+      <span class="dp-title">${MONTHS[_pickerMonth]} ${_pickerYear}</span>
+      <button class="dp-nav" id="dp-next">›</button>
+    </div>
+    <div class="dp-grid">${cells}</div>
+    <div class="dp-footer">
+      <button class="dp-close">סגור</button>
+    </div>`;
+
+  document.getElementById('dp-prev').onclick = e => { e.stopPropagation(); _pickerMonth--; if (_pickerMonth < 0) { _pickerMonth = 11; _pickerYear--; } renderDatePicker(); };
+  document.getElementById('dp-next').onclick = e => { e.stopPropagation(); _pickerMonth++; if (_pickerMonth > 11) { _pickerMonth = 0; _pickerYear++; } renderDatePicker(); };
+  document.querySelector('#mini-date-picker .dp-close').onclick = closeDatePicker;
+  document.querySelectorAll('#mini-date-picker .dp-day').forEach(el => {
+    el.onclick = e => {
+      e.stopPropagation();
+      const iso = el.dataset.iso;
+      if (_pickerTarget === 'start') {
+        reportRange.start = iso;
+        document.getElementById('range-start').textContent = fmtDate(iso);
+      } else {
+        reportRange.end = iso;
+        document.getElementById('range-end').textContent = fmtDate(iso);
+      }
+      closeDatePicker();
+      renderReports();
+    };
+  });
 }
 function currSym(c) { return CURRENCY_SYMBOLS[c] || c; }
 
@@ -1787,22 +1856,13 @@ function bindEvents() {
       renderReports();
     });
   });
-  function autoSlashDate(e) {
-    let v = e.target.value.replace(/[^\d]/g, '');
-    if (v.length > 2) v = v.slice(0,2) + '/' + v.slice(2);
-    if (v.length > 5) v = v.slice(0,5) + '/' + v.slice(5);
-    if (v.length > 10) v = v.slice(0,10);
-    e.target.value = v;
-    const iso = parseDMY(v);
-    return iso;
-  }
-  document.getElementById('range-start').addEventListener('input', e => {
-    const iso = autoSlashDate(e);
-    if (iso) { reportRange.start = iso; renderReports(); }
-  });
-  document.getElementById('range-end').addEventListener('input', e => {
-    const iso = autoSlashDate(e);
-    if (iso) { reportRange.end = iso; renderReports(); }
+  document.getElementById('range-start').addEventListener('click', e => { e.stopPropagation(); openDatePicker('start'); });
+  document.getElementById('range-end').addEventListener('click', e => { e.stopPropagation(); openDatePicker('end'); });
+  document.addEventListener('click', e => {
+    if (!document.getElementById('mini-date-picker').classList.contains('hidden') &&
+        !document.getElementById('mini-date-picker').contains(e.target)) {
+      closeDatePicker();
+    }
   });
   document.getElementById('report-client-filter').addEventListener('change', e => {
     reportFilters.client = e.target.value; renderReports();
