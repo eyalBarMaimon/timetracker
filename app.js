@@ -11,7 +11,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.0.8';
+const APP_VERSION = '1.0.9';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -83,8 +83,8 @@ function closeDatePicker() {
 }
 
 function renderDatePicker() {
-  const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
-  const DAYS = ['א','ב','ג','ד','ה','ו','ש'];
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
   const today = new Date().toISOString().slice(0, 10);
   const selStart = reportRange.start;
   const selEnd   = reportRange.end;
@@ -115,7 +115,7 @@ function renderDatePicker() {
     </div>
     <div class="dp-grid">${cells}</div>
     <div class="dp-footer">
-      <button class="dp-close">סגור</button>
+      <button class="dp-close">Close</button>
     </div>`;
 
   document.getElementById('dp-prev').onclick = e => { e.stopPropagation(); _pickerMonth--; if (_pickerMonth < 0) { _pickerMonth = 11; _pickerYear--; } renderDatePicker(); };
