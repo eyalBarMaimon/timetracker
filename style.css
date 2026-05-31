@@ -413,6 +413,8 @@ html, body {
 .running-info { flex: 1; min-width: 0; }
 .running-note { font-size: 14px; color: #fff; font-weight: 500; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .running-project { font-size: 12px; color: rgba(255,255,255,0.7); display: block; }
+.running-project-btn { background: none; border: none; padding: 0; cursor: pointer; text-align: left; text-decoration: underline dotted rgba(255,255,255,0.4); }
+.running-project-btn:hover { color: #fff; }
 .running-time-group { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 2px; }
 .running-time { font-family: var(--font-mono); font-size: 20px; font-weight: 700; color: #fff; }
 .running-start-row { display: flex; align-items: center; gap: 4px; }

@@ -11,7 +11,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.0.11';
+const APP_VERSION = '1.0.12';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -1801,6 +1801,16 @@ function bindEvents() {
     else startTimer();
   });
   document.getElementById('stop-btn').addEventListener('click', stopTimer);
+
+  // Change project while timer is running
+  document.getElementById('running-project-display').addEventListener('click', () => {
+    if (!data.runningEntry) return;
+    openProjectPicker(projectId => {
+      data.runningEntry.projectId = projectId;
+      saveLocal();
+      showRunningBar();
+    });
+  });
 
   // Edit start time while timer is running
   document.getElementById('running-start-time').addEventListener('change', e => {
