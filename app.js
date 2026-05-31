@@ -11,7 +11,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.0.12';
+const APP_VERSION = '1.0.10';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -1813,15 +1813,21 @@ function bindEvents() {
   });
 
   // Edit start time while timer is running
-  document.getElementById('running-start-time').addEventListener('change', e => {
+  const startTimeInput = document.getElementById('running-start-time');
+  startTimeInput.addEventListener('input', e => {
+    let v = e.target.value.replace(/[^\d]/g, '');
+    if (v.length > 2) v = v.slice(0, 2) + ':' + v.slice(2, 4);
+    e.target.value = v;
+  });
+  startTimeInput.addEventListener('blur', e => {
     if (!data.runningEntry) return;
-    const [h, m] = e.target.value.split(':').map(Number);
-    if (isNaN(h) || isNaN(m)) return;
-    const orig = new Date(data.runningEntry.start);
-    const updated = new Date(orig);
+    const match = e.target.value.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) { showRunningBar(); return; }
+    const h = parseInt(match[1], 10), m = parseInt(match[2], 10);
+    if (h > 23 || m > 59) { showRunningBar(); return; }
+    const updated = new Date(data.runningEntry.start);
     updated.setHours(h, m, 0, 0);
-    // don't allow a future start time
-    if (updated > new Date()) return;
+    if (updated > new Date()) { showRunningBar(); return; }
     data.runningEntry.start = updated.toISOString();
     localStorage.setItem('running_start', data.runningEntry.start);
     saveLocal();
