@@ -11,7 +11,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.0.9';
+const APP_VERSION = '1.0.10';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -470,6 +470,12 @@ function showRunningBar() {
   noteEl.textContent = (entry && entry.note) ? entry.note : 'No description';
   const proj = entry ? getProject(entry.projectId) : null;
   projEl.textContent = proj ? proj.name : '—';
+  if (entry) {
+    const d = new Date(entry.start);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    document.getElementById('running-start-time').value = `${hh}:${mm}`;
+  }
 }
 
 function setTimerProject(projectId) {
@@ -1795,6 +1801,22 @@ function bindEvents() {
     else startTimer();
   });
   document.getElementById('stop-btn').addEventListener('click', stopTimer);
+
+  // Edit start time while timer is running
+  document.getElementById('running-start-time').addEventListener('change', e => {
+    if (!data.runningEntry) return;
+    const [h, m] = e.target.value.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) return;
+    const orig = new Date(data.runningEntry.start);
+    const updated = new Date(orig);
+    updated.setHours(h, m, 0, 0);
+    // don't allow a future start time
+    if (updated > new Date()) return;
+    data.runningEntry.start = updated.toISOString();
+    localStorage.setItem('running_start', data.runningEntry.start);
+    saveLocal();
+    updateRunningDisplay();
+  });
 
   // Project picker for timer
   document.getElementById('timer-project-btn').addEventListener('click', () => {

@@ -413,7 +413,22 @@ html, body {
 .running-info { flex: 1; min-width: 0; }
 .running-note { font-size: 14px; color: #fff; font-weight: 500; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .running-project { font-size: 12px; color: rgba(255,255,255,0.7); display: block; }
-.running-time { font-family: var(--font-mono); font-size: 20px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.running-time-group { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 2px; }
+.running-time { font-family: var(--font-mono); font-size: 20px; font-weight: 700; color: #fff; }
+.running-start-row { display: flex; align-items: center; gap: 4px; }
+.running-start-label { font-size: 11px; color: rgba(255,255,255,0.7); }
+.running-start-input {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 4px;
+  color: rgba(255,255,255,0.85);
+  padding: 1px 4px;
+  width: 72px;
+  cursor: pointer;
+}
+.running-start-input:focus { outline: none; border-color: rgba(255,255,255,0.6); background: rgba(0,0,0,0.35); }
 .stop-btn {
   padding: 8px 16px;
   background: rgba(0,0,0,0.3);
