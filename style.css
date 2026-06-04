@@ -495,6 +495,27 @@ html, body {
 .kpi-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
 .kpi-value { font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: var(--text); }
 
+.report-mode-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.report-mode-btn {
+  padding: 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: none;
+  color: var(--text2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.report-mode-btn:hover { border-color: var(--accent); color: var(--accent); }
+.report-mode-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.report-invoice-row {
+  margin-bottom: 16px;
+}
 .date-filter-row {
   display: flex;
   gap: 12px;

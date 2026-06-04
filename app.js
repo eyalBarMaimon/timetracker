@@ -11,7 +11,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.0.10';
+const APP_VERSION = '1.0.11';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -22,6 +22,8 @@ let timerInterval = null;
 let currentTab = 'timer';
 let reportRange = { preset: 'month', start: null, end: null };
 let reportFilters = { client: '', project: '' };
+let reportMode = 'normal'; // 'normal' | 'uninvoiced' | 'invoice'
+let reportInvoiceId = null;
 let dailyChart = null;
 let donutChart = null;
 let dropboxClient = null;
@@ -994,6 +996,12 @@ function getReportRange() {
 }
 
 function getFilteredEntries() {
+  if (reportMode === 'uninvoiced') {
+    return data.entries.filter(e => (e.paymentStatus || 'uninvoiced') === 'uninvoiced' && e.billable);
+  }
+  if (reportMode === 'invoice') {
+    return reportInvoiceId ? data.entries.filter(e => e.invoiceId === reportInvoiceId) : [];
+  }
   const { start, end } = getReportRange();
   const cf = reportFilters.client;
   const pf = reportFilters.project;
@@ -1007,6 +1015,12 @@ function getFilteredEntries() {
 }
 
 function getFilteredExpenses() {
+  if (reportMode === 'uninvoiced') {
+    return data.expenses.filter(exp => (exp.paymentStatus || 'uninvoiced') === 'uninvoiced' && exp.billable);
+  }
+  if (reportMode === 'invoice') {
+    return reportInvoiceId ? data.expenses.filter(exp => exp.invoiceId === reportInvoiceId) : [];
+  }
   const { start, end } = getReportRange();
   const cf = reportFilters.client;
   const pf = reportFilters.project;
@@ -1018,11 +1032,53 @@ function getFilteredExpenses() {
   });
 }
 
+function updateReportModeUI() {
+  const isNormal = reportMode === 'normal';
+  const isInvoice = reportMode === 'invoice';
+
+  // Show/hide date range and client/project filters
+  document.querySelector('.date-filter-row').classList.toggle('hidden', !isNormal);
+
+  // Show/hide invoice selector row
+  const invRow = document.getElementById('report-invoice-row');
+  invRow.classList.toggle('hidden', !isInvoice);
+
+  // Populate invoice selector if needed
+  if (isInvoice) {
+    const sel = document.getElementById('report-invoice-select');
+    const prev = sel.value;
+    const invoices = [...data.invoices].sort((a, b) => (b.sentAt || b.id) < (a.sentAt || a.id) ? -1 : 1);
+    sel.innerHTML = '<option value="">— Select Invoice —</option>' +
+      invoices.map(inv => {
+        const client = data.clients.find(c => c.id === inv.clientId);
+        return `<option value="${inv.id}">${inv.number} · ${client ? client.name : '—'} · ${fmtMoney(inv.totalNative, inv.currency)}</option>`;
+      }).join('');
+    if (prev && invoices.find(i => i.id === prev)) sel.value = prev;
+    reportInvoiceId = sel.value || null;
+  }
+
+  // Mode buttons active state
+  document.querySelectorAll('.report-mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === reportMode);
+  });
+}
+
 function renderReports() {
   populateFilterDropdowns();
+  updateReportModeUI();
   const entries = getFilteredEntries();
   const expenses = getFilteredExpenses();
-  const { start, end } = getReportRange();
+
+  // Date range for chart: use actual entry dates in uninvoiced/invoice modes
+  let start, end;
+  if (reportMode === 'normal') {
+    ({ start, end } = getReportRange());
+  } else if (entries.length) {
+    const dates = entries.map(e => isoDate(e.start)).sort();
+    start = dates[0]; end = dates[dates.length - 1];
+  } else {
+    const r = getReportRange(); start = r.start; end = r.end;
+  }
 
   // KPIs
   const totalSec = totalEntrySec(entries);
@@ -1907,6 +1963,17 @@ function bindEvents() {
   });
   document.getElementById('report-project-filter').addEventListener('change', e => {
     reportFilters.project = e.target.value; renderReports();
+  });
+  document.querySelectorAll('.report-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      reportMode = btn.dataset.mode;
+      if (reportMode !== 'invoice') reportInvoiceId = null;
+      renderReports();
+    });
+  });
+  document.getElementById('report-invoice-select').addEventListener('change', e => {
+    reportInvoiceId = e.target.value || null;
+    renderReports();
   });
 
   // Exports

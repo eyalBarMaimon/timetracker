@@ -111,6 +111,20 @@
       </div>
     </div>
 
+    <!-- Report Mode Selector -->
+    <div class="report-mode-row">
+      <button class="report-mode-btn active" data-mode="normal">By Date Range</button>
+      <button class="report-mode-btn" data-mode="uninvoiced">Uninvoiced</button>
+      <button class="report-mode-btn" data-mode="invoice">By Invoice</button>
+    </div>
+
+    <!-- Invoice Selector (shown in "By Invoice" mode) -->
+    <div id="report-invoice-row" class="report-invoice-row hidden">
+      <select id="report-invoice-select" class="filter-select" style="max-width:400px">
+        <option value="">— Select Invoice —</option>
+      </select>
+    </div>
+
     <!-- KPI Cards -->
     <div class="kpi-row">
       <div class="kpi-card">
