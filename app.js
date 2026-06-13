@@ -7,7 +7,8 @@ const DEFAULT_DATA = {
   runningEntry: null, favorites: [],
   settings: {
     baseCurrency: 'ILS', displayCurrency: 'ILS', fxMarkup: 4,
-    weekStartDay: 'sunday', dropboxConnected: false, dropboxAppKey: ''
+    weekStartDay: 'sunday', dropboxConnected: false, dropboxAppKey: '',
+    invoiceCounter: 0, invoiceYear: 0
   }
 };
 
@@ -28,15 +29,18 @@ let dailyChart = null;
 let donutChart = null;
 let dropboxClient = null;
 let syncPending = false;
+let syncInProgress = false;
 let pendingEntryEdit = null;   // id being edited (null = new)
 let pendingExpenseEdit = null;
 let pendingClientEdit = null;
 let pendingProjectEdit = null;
 let pendingInvoiceId = null;
 let invoiceFilter = 'all';
+let _pendingImport = null;
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function fmt2(n) { return String(Math.floor(n)).padStart(2, '0'); }
 function fmtDuration(seconds) {
   if (!seconds || seconds < 0) return '0:00:00';
@@ -328,7 +332,8 @@ async function handleDropboxCallback() {
 }
 
 async function dropboxSync(mode) {
-  if (!dropboxClient) return;
+  if (!dropboxClient || syncInProgress) return;
+  syncInProgress = true;
   setSyncStatus('loading');
   try {
     if (mode === 'read') {
@@ -370,6 +375,8 @@ async function dropboxSync(mode) {
       setSyncStatus('error');
       syncPending = true;
     }
+  } finally {
+    syncInProgress = false;
   }
 }
 
@@ -486,7 +493,7 @@ function setTimerProject(projectId) {
   if (projectId) {
     const p = getProject(projectId);
     const color = getProjectColor(projectId);
-    btn.innerHTML = `<span style="color:${color}">●</span> ${p ? p.name : 'Project'} ✕`;
+    btn.innerHTML = `<span style="color:${color}">●</span> ${p ? esc(p.name) : 'Project'} ✕`;
     btn.classList.add('active');
   } else {
     btn.innerHTML = '📁 Select project';
@@ -560,8 +567,8 @@ function renderItemRow(item, showReplay) {
   return `<div class="entry-row" data-id="${item.id}" data-type="entry">
     <span class="project-dot" style="background:${color}"></span>
     <div class="entry-middle">
-      <div class="entry-note${!item.note ? ' empty' : ''}">${item.note || '+ Add description'}</div>
-      <div class="entry-project">${proj ? proj.name : '—'} ${payDot}</div>
+      <div class="entry-note${!item.note ? ' empty' : ''}">${esc(item.note) || '+ Add description'}</div>
+      <div class="entry-project">${proj ? esc(proj.name) : '—'} ${payDot}</div>
     </div>
     <div class="entry-right">
       ${billableIcon}
@@ -579,8 +586,8 @@ function renderExpenseRow(exp) {
   return `<div class="entry-row expense-row" data-id="${exp.id}" data-type="expense">
     <span class="project-dot" style="background:${color}"></span>
     <div class="entry-middle">
-      <div class="entry-note">${icon} ${exp.description || 'Expense'}</div>
-      <div class="entry-project">${proj ? proj.name : '—'} ${payDot}</div>
+      <div class="entry-note">${icon} ${esc(exp.description) || 'Expense'}</div>
+      <div class="entry-project">${proj ? esc(proj.name) : '—'} ${payDot}</div>
     </div>
     <div class="entry-right">
       <span class="entry-duration">${fmtMoney(exp.amount, exp.currency)}</span>
@@ -885,9 +892,17 @@ function saveClient() {
 
 function deleteClient(id) {
   if (!confirm('Delete this client? All projects will be unlinked.')) return;
+  // Collect projects belonging to this client so we can clear entries/expenses too
+  const clientProjectIds = data.projects.filter(p => p.clientId === id).map(p => p.id);
   data.clients = data.clients.filter(c => c.id !== id);
   data.projects.forEach(p => { if (p.clientId === id) p.clientId = null; });
+  // Clear project reference on entries/expenses for the unlinked projects
+  clientProjectIds.forEach(pid => {
+    data.entries.forEach(e => { if (e.projectId === pid) e.projectId = null; });
+    data.expenses.forEach(exp => { if (exp.projectId === pid) exp.projectId = null; });
+  });
   closeModal('modal-client');
+  renderAll();
   renderSettings();
   save();
 }
@@ -927,7 +942,11 @@ function saveProject() {
 function deleteProject(id) {
   if (!confirm('Delete this project?')) return;
   data.projects = data.projects.filter(p => p.id !== id);
+  // Clear projectId from entries and expenses that referenced this project
+  data.entries.forEach(e => { if (e.projectId === id) e.projectId = null; });
+  data.expenses.forEach(exp => { if (exp.projectId === id) exp.projectId = null; });
   closeModal('modal-project');
+  renderAll();
   renderSettings();
   save();
 }
@@ -939,7 +958,6 @@ function openProjectPicker(callback) {
   search.value = '';
 
   function render(q) {
-    const clients = data.clients;
     const filtered = data.projects.filter(p => !q || p.name.toLowerCase().includes(q));
     if (!filtered.length) { list.innerHTML = '<div class="empty-state">No projects found</div>'; return; }
 
@@ -952,10 +970,10 @@ function openProjectPicker(callback) {
 
     list.innerHTML = Object.entries(byClient).map(([cid, projs]) => {
       const client = cid === '__none__' ? null : getClient(cid);
-      return `<div class="picker-section">${client ? client.name : 'No client'}</div>` +
+      return `<div class="picker-section">${client ? esc(client.name) : 'No client'}</div>` +
         projs.map(p => `<div class="picker-item" data-proj="${p.id}">
           <span class="project-dot" style="background:${p.color || '#888'}"></span>
-          ${p.name}
+          ${esc(p.name)}
         </div>`).join('');
     }).join('');
 
@@ -968,7 +986,11 @@ function openProjectPicker(callback) {
   }
 
   render('');
-  search.addEventListener('input', e => render(e.target.value.toLowerCase()));
+  // Remove any previous listener before adding a new one to prevent accumulation
+  if (search._pickerHandler) search.removeEventListener('input', search._pickerHandler);
+  const handler = e => render(e.target.value.toLowerCase());
+  search._pickerHandler = handler;
+  search.addEventListener('input', handler);
   showModal('modal-project-picker');
 }
 
@@ -1117,6 +1139,15 @@ function renderDailyChart(entries, start, end) {
     dayLabels.push(`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`);
   }
 
+  // Pre-build a sec map: { date: { projectId: totalSec } } — avoids O(n²) filter-in-loop
+  const secMap = {};
+  entries.forEach(e => {
+    const ds = isoDate(e.start);
+    if (!secMap[ds]) secMap[ds] = {};
+    const pid = e.projectId || '__none__';
+    secMap[ds][pid] = (secMap[ds][pid] || 0) + durationSec(e.start, e.end);
+  });
+
   // One dataset per project that appears in the filtered entries
   const projectIds = [...new Set(entries.map(e => e.projectId).filter(Boolean))];
   const datasets = projectIds.map(pid => {
@@ -1127,15 +1158,14 @@ function renderDailyChart(entries, start, end) {
       borderRadius: 4,
       skipNull: true,
       data: dayKeys.map(ds => {
-        const sec = totalEntrySec(entries.filter(e => isoDate(e.start) === ds && e.projectId === pid));
+        const sec = secMap[ds]?.[pid] || 0;
         return sec ? sec / 3600 : null;
       })
     };
   });
 
   // Entries with no project
-  const noProjSecs = dayKeys.map(ds =>
-    totalEntrySec(entries.filter(e => isoDate(e.start) === ds && !e.projectId)));
+  const noProjSecs = dayKeys.map(ds => secMap[ds]?.['__none__'] || 0);
   if (noProjSecs.some(Boolean)) {
     datasets.push({ label: 'No project', backgroundColor: '#4a3d5a', borderRadius: 4, skipNull: true,
       data: noProjSecs.map(s => s ? s / 3600 : null) });
@@ -1227,13 +1257,13 @@ function renderProjectTable(entries, expenses, disp) {
       html += `<tr class="client-group-row">
         <td colspan="6">
           <span class="project-dot" style="background:${r.client?.color || '#888'}"></span>
-          <strong>${r.client?.name || 'No client'}</strong>
+          <strong>${r.client ? esc(r.client.name) : 'No client'}</strong>
           <span class="client-group-total">${fmtDuration(clientSec)}</span>
         </td>
       </tr>`;
     }
     html += `<tr>
-      <td class="proj-indent"><span class="project-dot" style="background:${r.proj?.color||'#888'}"></span> ${r.proj?.name || 'Unknown'}</td>
+      <td class="proj-indent"><span class="project-dot" style="background:${r.proj?.color||'#888'}"></span> ${r.proj ? esc(r.proj.name) : 'Unknown'}</td>
       <td class="mono">${fmtDuration(r.sec)}</td>
       <td class="mono">${r.nativeTime > 0 ? fmtMoney(r.nativeTime, r.currency) : '—'}</td>
       <td class="mono">${r.nativeExp  > 0 ? fmtMoney(r.nativeExp,  r.currency) : '—'}</td>
@@ -1261,7 +1291,7 @@ function renderDescTable(entries, disp) {
 
   const tbody = document.getElementById('desc-table-body');
   tbody.innerHTML = Object.entries(groups).sort((a,b) => b[1].sec - a[1].sec).map(([key, g]) => `<tr>
-    <td>${key === '__none__' ? '<span style="color:var(--text3)">Without description</span>' : key}</td>
+    <td>${key === '__none__' ? '<span style="color:var(--text3)">Without description</span>' : esc(key)}</td>
     <td class="mono">${fmtDuration(g.sec)}</td>
     <td class="mono">${g.amount > 0 ? fmtMoney(g.amount, data.settings.baseCurrency) : '—'}</td>
     <td>${total > 0 ? (g.sec / total * 100).toFixed(1) + '%' : '0%'}</td>
@@ -1347,8 +1377,8 @@ function renderInvoices() {
     const overdue = inv.status === 'sent' && (Date.now() - new Date(inv.sentAt)) / 86400000 > 30;
     const ago = inv.sentAt ? daysSince(inv.sentAt) : '';
     return `<div class="invoice-row ${inv.status === 'paid' ? 'paid' : ''} ${overdue ? 'overdue' : ''}" data-inv="${inv.id}">
-      <span class="invoice-number">${inv.number}</span>
-      <span class="invoice-client">${client ? client.name : '—'}</span>
+      <span class="invoice-number">${esc(inv.number)}</span>
+      <span class="invoice-client">${client ? esc(client.name) : '—'}</span>
       <span class="invoice-amount">${fmtMoney(inv.totalNative, inv.currency)}</span>
       <span class="invoice-status status-${inv.status}">
         ${inv.status === 'paid' ? '✓' : inv.status === 'sent' ? '●' : '○'} ${inv.status.toUpperCase()}
@@ -1387,8 +1417,8 @@ function openInvoiceDetail(id) {
 
   let html = `<div class="invoice-detail-section">
     <h4>Client</h4>
-    <div>${client ? client.name : '—'}</div>
-    <div style="color:var(--text3);font-size:12px">${inv.number} · ${inv.status.toUpperCase()} · ${inv.sentAt ? new Date(inv.sentAt).toLocaleDateString() : '—'}</div>
+    <div>${client ? esc(client.name) : '—'}</div>
+    <div style="color:var(--text3);font-size:12px">${esc(inv.number)} · ${inv.status.toUpperCase()} · ${inv.sentAt ? new Date(inv.sentAt).toLocaleDateString() : '—'}</div>
   </div>`;
 
   if (timeEntries.length) {
@@ -1398,7 +1428,7 @@ function openInvoiceDetail(id) {
       const sec = durationSec(e.start, e.end);
       const amt = (sec / 3600) * rate;
       html += `<div class="invoice-line">
-        <span>${isoDate(e.start)} · ${e.note || 'No description'} · ${fmtDuration(sec)}</span>
+        <span>${isoDate(e.start)} · ${esc(e.note) || 'No description'} · ${fmtDuration(sec)}</span>
         <span>${amt > 0 ? fmtMoney(amt, cur) : '—'}</span>
       </div>`;
     });
@@ -1409,7 +1439,7 @@ function openInvoiceDetail(id) {
     html += `<div class="invoice-detail-section"><h4>Expenses</h4>`;
     expItems.forEach(exp => {
       html += `<div class="invoice-line">
-        <span>${exp.date} · ${CATEGORY_ICONS[exp.category] || ''} ${exp.description || 'Expense'}</span>
+        <span>${exp.date} · ${CATEGORY_ICONS[exp.category] || ''} ${esc(exp.description) || 'Expense'}</span>
         <span>${fmtMoney(exp.amount, exp.currency)}</span>
       </div>`;
     });
@@ -1420,7 +1450,7 @@ function openInvoiceDetail(id) {
     <span>Total</span>
     <span>${fmtMoney(inv.totalNative, inv.currency)}</span>
   </div>`;
-  if (inv.note) html += `<div style="color:var(--text3);font-size:13px;margin-top:8px">${inv.note}</div>`;
+  if (inv.note) html += `<div style="color:var(--text3);font-size:13px;margin-top:8px">${esc(inv.note)}</div>`;
   const markup = data.settings.fxMarkup || 4;
   html += `<div class="invoice-footnote">Exchange rate: ECB midpoint + ${markup}% conversion buffer</div>`;
 
@@ -1503,7 +1533,7 @@ function renderInvoiceItems() {
       const amt = rate ? (sec / 3600) * rate : null;
       return `<div class="invoice-item-row">
         <input type="checkbox" class="inv-item-check" data-type="entry" data-id="${e.id}" ${selectAll ? 'checked' : ''}>
-        <span class="invoice-item-desc">${isoDate(e.start)} · ${e.note || 'No description'} · ${fmtDuration(sec)}</span>
+        <span class="invoice-item-desc">${isoDate(e.start)} · ${esc(e.note) || 'No description'} · ${fmtDuration(sec)}</span>
         <span class="invoice-item-amount">${amt !== null ? fmtMoney(amt, cur) : '—'}</span>
       </div>`;
     }),
@@ -1511,7 +1541,7 @@ function renderInvoiceItems() {
       const p = getProject(exp.projectId);
       return `<div class="invoice-item-row">
         <input type="checkbox" class="inv-item-check" data-type="expense" data-id="${exp.id}" ${selectAll ? 'checked' : ''}>
-        <span class="invoice-item-desc">${exp.date} · ${CATEGORY_ICONS[exp.category]||''} ${exp.description || 'Expense'}</span>
+        <span class="invoice-item-desc">${exp.date} · ${CATEGORY_ICONS[exp.category]||''} ${esc(exp.description) || 'Expense'}</span>
         <span class="invoice-item-amount">${fmtMoney(exp.amount, exp.currency)}</span>
       </div>`;
     })
@@ -1568,8 +1598,13 @@ function createInvoice() {
   });
 
   const year = new Date().getFullYear();
-  const count = data.invoices.filter(i => i.number.startsWith(`INV-${year}-`)).length + 1;
-  const number = `INV-${year}-${String(count).padStart(3,'0')}`;
+  // Reset counter when the year changes; increment otherwise
+  if ((data.settings.invoiceYear || 0) !== year) {
+    data.settings.invoiceYear = year;
+    data.settings.invoiceCounter = 0;
+  }
+  data.settings.invoiceCounter = (data.settings.invoiceCounter || 0) + 1;
+  const number = `INV-${year}-${String(data.settings.invoiceCounter).padStart(3,'0')}`;
   const now = isoNow();
   const inv = { id: uid(), clientId, number, status: 'sent', sentAt: now, paidAt: null, entryIds, expenseIds, totalNative: total, currency, note };
   data.invoices.push(inv);
@@ -1630,8 +1665,8 @@ function renderClientsList() {
     const rateStr = c.hourlyRate ? `${currSym(c.currency || data.settings.baseCurrency)}${c.hourlyRate}/hr` : (c.currency || data.settings.baseCurrency);
     return `<div class="crud-item" data-client="${c.id}">
       <span class="crud-color" style="background:${c.color}"></span>
-      <span class="crud-name">${c.name}</span>
-      <span class="crud-meta">${projCount} project${projCount !== 1 ? 's' : ''} · ${rateStr}</span>
+      <span class="crud-name">${esc(c.name)}</span>
+      <span class="crud-meta">${projCount} project${projCount !== 1 ? 's' : ''} · ${esc(rateStr)}</span>
     </div>`;
   }).join('');
   list.querySelectorAll('.crud-item').forEach(item => {
@@ -1648,8 +1683,8 @@ function renderProjectsList() {
     const rateStr = rate ? `${currSym(currency)}${rate}/hr` : currency;
     return `<div class="crud-item" data-project="${p.id}">
       <span class="crud-color" style="background:${p.color || '#888'}"></span>
-      <span class="crud-name">${p.name}</span>
-      <span class="crud-meta">${client ? client.name + ' · ' : ''}${rateStr}</span>
+      <span class="crud-name">${esc(p.name)}</span>
+      <span class="crud-meta">${client ? esc(client.name) + ' · ' : ''}${esc(rateStr)}</span>
     </div>`;
   }).join('');
   list.querySelectorAll('.crud-item').forEach(item => {
@@ -1664,7 +1699,7 @@ function renderFavorites() {
     const p = getProject(fav.projectId);
     const color = getProjectColor(fav.projectId);
     return `<button class="fav-chip" data-fav="${fav.id}" style="border-color:${color}20">
-      <span style="color:${color}">●</span> ${p ? p.name : 'Unknown'}${fav.note ? ' · ' + fav.note : ''}
+      <span style="color:${color}">●</span> ${p ? esc(p.name) : 'Unknown'}${fav.note ? ' · ' + esc(fav.note) : ''}
       <span class="fav-remove" data-fav-remove="${fav.id}" title="Remove">✕</span>
     </button>`;
   }).join('');
@@ -1754,24 +1789,24 @@ function handleCSVImport(file) {
 
     const previewList = document.getElementById('import-preview-list');
     previewList.innerHTML = toImport.slice(0, 20).map(e =>
-      `<div class="import-preview-row">${isoDate(e.start)} · ${e.note || 'No description'} · ${fmtDuration(durationSec(e.start, e.end))}</div>`
+      `<div class="import-preview-row">${isoDate(e.start)} · ${esc(e.note) || 'No description'} · ${fmtDuration(durationSec(e.start, e.end))}</div>`
     ).join('') + (toImport.length > 20 ? `<div class="import-preview-row">… and ${toImport.length - 20} more</div>` : '');
 
-    // Store pending import
-    window._pendingImport = { newClients: Object.values(newClients), newProjects: Object.values(newProjects), entries: toImport };
+    // Store pending import in module-level variable
+    _pendingImport = { newClients: Object.values(newClients), newProjects: Object.values(newProjects), entries: toImport };
     showModal('modal-import');
   };
   reader.readAsText(file);
 }
 
 function confirmImport() {
-  const imp = window._pendingImport;
+  const imp = _pendingImport;
   if (!imp) return;
   data.clients.push(...imp.newClients);
   data.projects.push(...imp.newProjects);
   data.entries.push(...imp.entries);
   data.entries.sort((a,b) => b.start < a.start ? -1 : 1);
-  window._pendingImport = null;
+  _pendingImport = null;
   closeModal('modal-import');
   renderAll();
   save();
@@ -1884,7 +1919,8 @@ function bindEvents() {
     const updated = new Date(data.runningEntry.start);
     updated.setHours(h, m, 0, 0);
     if (updated > new Date()) { showRunningBar(); return; }
-    data.runningEntry.start = updated.toISOString();
+    // Use same local-time ISO format as isoNow() to stay consistent
+    data.runningEntry.start = new Date(updated - updated.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
     localStorage.setItem('running_start', data.runningEntry.start);
     saveLocal();
     updateRunningDisplay();
