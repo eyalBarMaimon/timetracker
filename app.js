@@ -12,7 +12,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.0.11';
+const APP_VERSION = '1.1.0';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -1194,7 +1194,7 @@ function renderDailyChart(entries, start, end) {
   });
 }
 
-function renderProjectTable(entries, expenses, disp) {
+function renderProjectTable(entries, expenses) {
   const totalSec = totalEntrySec(entries);
   const byProject = {};
   entries.forEach(e => {
@@ -1277,7 +1277,7 @@ function renderProjectTable(entries, expenses, disp) {
   tbody.innerHTML = html;
 }
 
-function renderDescTable(entries, disp) {
+function renderDescTable(entries) {
   const total = totalEntrySec(entries);
   const groups = {};
   entries.forEach(e => {
@@ -1538,7 +1538,6 @@ function renderInvoiceItems() {
       </div>`;
     }),
     ...clientExpenses.map(exp => {
-      const p = getProject(exp.projectId);
       return `<div class="invoice-item-row">
         <input type="checkbox" class="inv-item-check" data-type="expense" data-id="${exp.id}" ${selectAll ? 'checked' : ''}>
         <span class="invoice-item-desc">${exp.date} · ${CATEGORY_ICONS[exp.category]||''} ${esc(exp.description) || 'Expense'}</span>
