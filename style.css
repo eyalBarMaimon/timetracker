@@ -79,7 +79,8 @@ html, body {
   color: var(--accent);
 }
 .brand-icon { font-size: 24px; }
-.brand-version { font-size: 11px; font-weight: 400; color: var(--text3); margin-left: -4px; }
+.brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+.brand-version { font-size: 11px; font-weight: 400; color: var(--text3); }
 .sidebar-nav { list-style: none; flex: 1; }
 .sidebar-nav li { width: 100%; }
 .sidebar-nav .nav-btn {
