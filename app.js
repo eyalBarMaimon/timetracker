@@ -12,7 +12,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.1.1';
+const APP_VERSION = '1.1.2';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -30,6 +30,8 @@ let donutChart = null;
 let dropboxClient = null;
 let syncPending = false;
 let syncInProgress = false;
+let writeQueued = false;   // a write was requested while another sync was running
+let changeSeq = 0;         // bumps on every local change; guards reads from clobbering it
 let pendingEntryEdit = null;   // id being edited (null = new)
 let pendingExpenseEdit = null;
 let pendingClientEdit = null;
@@ -228,8 +230,16 @@ function loadLocal() {
   }
 }
 
+function isDirty() { return localStorage.getItem('timetracker_dirty') === '1'; }
+function setDirty(v) {
+  if (v) localStorage.setItem('timetracker_dirty', '1');
+  else localStorage.removeItem('timetracker_dirty');
+}
+
 async function save() {
+  changeSeq++;
   saveLocal();
+  setDirty(true);
   await dropboxSync('write');
 }
 
@@ -332,18 +342,29 @@ async function handleDropboxCallback() {
 }
 
 async function dropboxSync(mode) {
-  if (!dropboxClient || syncInProgress) return;
+  if (!dropboxClient) return;
+  if (syncInProgress) {
+    // Never drop a write: run it as soon as the current sync finishes
+    if (mode === 'write') writeQueued = true;
+    return;
+  }
+  // Unsynced local changes must be pushed before pulling, or the pull would erase them
+  if (mode === 'read' && isDirty()) mode = 'write';
   syncInProgress = true;
   setSyncStatus('loading');
+  const seqAtStart = changeSeq;
   try {
     if (mode === 'read') {
       const resp = await dropboxClient.filesDownload({ path: '/ClaudeCode/timetracker_data.json' });
       const text = await resp.result.fileBlob.text();
       const remote = JSON.parse(text);
-      data = Object.assign(JSON.parse(JSON.stringify(DEFAULT_DATA)), remote);
-      saveLocal();
-      renderAll();
-      renderSettings();
+      // A local change happened while downloading — keep it; the queued write will push it
+      if (changeSeq === seqAtStart && !isDirty()) {
+        data = Object.assign(JSON.parse(JSON.stringify(DEFAULT_DATA)), remote);
+        saveLocal();
+        renderAll();
+        renderSettings();
+      }
     } else {
       const content = JSON.stringify(data, null, 2);
       await dropboxClient.filesUpload({
@@ -351,6 +372,7 @@ async function dropboxSync(mode) {
         contents: content,
         mode: { '.tag': 'overwrite' }
       });
+      if (changeSeq === seqAtStart) setDirty(false);
     }
     setSyncStatus('ok');
   } catch (e) {
@@ -359,6 +381,7 @@ async function dropboxSync(mode) {
       try {
         const content = JSON.stringify(data, null, 2);
         await dropboxClient.filesUpload({ path: '/ClaudeCode/timetracker_data.json', contents: content, mode: { '.tag': 'add' } });
+        if (changeSeq === seqAtStart) setDirty(false);
         setSyncStatus('ok');
       } catch { setSyncStatus('error'); }
     } else if (e && (e.status === 401 || e.status === 400)) {
@@ -377,6 +400,10 @@ async function dropboxSync(mode) {
     }
   } finally {
     syncInProgress = false;
+  }
+  if (writeQueued && dropboxClient) {
+    writeQueued = false;
+    await dropboxSync('write');
   }
 }
 
