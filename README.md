@@ -14,13 +14,23 @@ Freelance time tracker with Dropbox sync. Tracks hours per project and client, g
 
 Open **https://eyalbarmaimon.github.io/timetracker/** in any browser. No install needed.
 
-### Option B — Local server (same Wi-Fi only)
+### Option B — Local server (for development / testing changes)
+
+The app is plain static files (no build step, no `package.json`). Serve the folder with any static server:
 
 ```bash
-npm install
-npm start
+npx serve -l 3000
+# or: python -m http.server 3000
 # App runs at http://localhost:3000
 # Mobile on same Wi-Fi: http://<your-IP>:3000
+```
+
+> For Dropbox to work locally, `http://localhost:3000` must be listed in the Dropbox app's Redirect URIs (see below).
+
+### Running tests
+
+```bash
+node --test tests/
 ```
 
 ---
@@ -34,7 +44,7 @@ npm start
    - `http://localhost:3000` (for local server, optional)
 4. Copy the **App Key** (short ~15-char code — not the secret)
 5. In the app → **Settings** → paste the App Key → **Connect Dropbox**
-6. Authorize once — data syncs to `/timetracker_data.json` (root of your Dropbox)
+6. Authorize once — data syncs to `/ClaudeCode/timetracker_data.json` in your Dropbox
 
 ---
 
@@ -81,7 +91,7 @@ Remember to bump `APP_VERSION` in `app.js` (line 14) with every push.
 
 ## Data Model
 
-All data stored in `timetracker_data.json` at the root of your Dropbox (`E:\Dropbox\timetracker_data.json` locally), and cached in `localStorage` as fallback.
+All data stored in `/ClaudeCode/timetracker_data.json` in your Dropbox, and cached in `localStorage` as fallback.
 
 - **Clients** hold the hourly rate and currency (not projects)
 - **Projects** belong to one client
