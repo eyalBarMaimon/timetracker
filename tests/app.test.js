@@ -156,6 +156,8 @@ const factory = new Function(
   __nsExport.setSyncInProgress   = v  => { syncInProgress = v; };
   __nsExport.setDropboxClient    = v  => { dropboxClient  = v; };
   __nsExport.mergeData           = mergeData;
+  __nsExport.activeProjects      = activeProjects;
+  __nsExport.toggleProjectArchive = toggleProjectArchive;
   __nsExport.bumpChangeSeq       = () => { changeSeq++; };
   __nsExport.resetSyncQueue      = () => { writeQueued = false; };
 `);
@@ -180,6 +182,7 @@ const {
   setReportInvoiceId, setPendingInvoiceId,
   dropboxSync, getSyncInProgress, setSyncInProgress, setDropboxClient,
   mergeData, bumpChangeSeq, resetSyncQueue,
+  activeProjects, toggleProjectArchive,
 } = ns;
 
 // ─── test helpers ─────────────────────────────────────────────────────────────
@@ -1058,5 +1061,44 @@ describe('Edge cases & regressions', () => {
     freshData();
     setDoc({ 'modal-project': nullEl() });
     assert.doesNotThrow(() => deleteProject('ghost-project'));
+  });
+});
+
+// =============================================================================
+// PROJECT ARCHIVE
+// =============================================================================
+describe('project archive', () => {
+  beforeEach(() => {
+    freshData();
+    setDropboxClient(null);
+    const d = getData();
+    d.projects = [
+      { id: 'p1', name: 'Active', clientId: null },
+      { id: 'p2', name: 'Old', clientId: null },
+    ];
+    d.entries = [{ id: 'e1', projectId: 'p2', start: '2026-01-01T10:00:00Z', end: '2026-01-01T11:00:00Z' }];
+  });
+
+  test('archiving hides the project from active list but keeps its entries', () => {
+    toggleProjectArchive('p2');
+    assert.equal(getData().projects.find(p => p.id === 'p2').archived, true);
+    assert.deepEqual(activeProjects().map(p => p.id), ['p1']);
+    assert.equal(getData().entries[0].projectId, 'p2', 'entries keep their project');
+  });
+
+  test('archived project still listed when it is the current selection', () => {
+    toggleProjectArchive('p2');
+    assert.deepEqual(activeProjects('p2').map(p => p.id), ['p1', 'p2']);
+  });
+
+  test('restore brings the project back', () => {
+    toggleProjectArchive('p2');
+    toggleProjectArchive('p2');
+    assert.equal(getData().projects.find(p => p.id === 'p2').archived, undefined);
+    assert.deepEqual(activeProjects().map(p => p.id), ['p1', 'p2']);
+  });
+
+  test('unknown id does not throw', () => {
+    assert.doesNotThrow(() => toggleProjectArchive('nope'));
   });
 });

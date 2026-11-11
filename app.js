@@ -12,7 +12,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -153,6 +153,11 @@ function fmtMoney(amount, currency) {
 }
 
 function getProject(id) { return data.projects.find(p => p.id === id); }
+// Archived projects are hidden from pickers; keepId keeps the one already selected on an item
+function activeProjects(keepId) { return data.projects.filter(p => !p.archived || p.id === keepId); }
+function projectOptions(list) {
+  return list.map(p => `<option value="${p.id}">${esc(p.name)}${p.archived ? ' (archived)' : ''}</option>`).join('');
+}
 function getClient(id) { return data.clients.find(c => c.id === id); }
 function getProjectColor(projectId) { const p = getProject(projectId); return (p && p.color) ? p.color : '#888'; }
 
@@ -763,7 +768,8 @@ function populateFilterDropdowns() {
     const el = document.getElementById(id);
     if (!el) return;
     const cur = el.value;
-    el.innerHTML = `<option value="">All Projects</option>` + data.projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    const sorted = [...data.projects].sort((a, b) => (!!a.archived) - (!!b.archived));
+    el.innerHTML = `<option value="">All Projects</option>` + projectOptions(sorted);
     el.value = cur;
   });
 }
@@ -782,7 +788,7 @@ function openEntryModal(id) {
   // Populate project select
   const projSel = document.getElementById('entry-project');
   projSel.innerHTML = `<option value="">— No project —</option>` +
-    data.projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    projectOptions(activeProjects(entry ? entry.projectId : timerProjectId));
   projSel.value = entry ? (entry.projectId || '') : (timerProjectId || '');
 
   if (entry) {
@@ -872,7 +878,7 @@ function openExpenseModal(id) {
 
   const projSel = document.getElementById('expense-project');
   projSel.innerHTML = `<option value="">— No project —</option>` +
-    data.projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    projectOptions(activeProjects(exp ? exp.projectId : timerProjectId));
   projSel.value = exp ? (exp.projectId || '') : (timerProjectId || '');
 
   const catSel = document.getElementById('expense-category');
@@ -1008,6 +1014,9 @@ function openProjectModal(id) {
   clientSel.value = proj ? (proj.clientId || '') : '';
 
   document.getElementById('project-delete-btn').classList.toggle('hidden', !proj);
+  const archBtn = document.getElementById('project-archive-btn');
+  archBtn.classList.toggle('hidden', !proj);
+  archBtn.textContent = proj && proj.archived ? '↩ Restore Project' : '🗄 Archive Project';
   showModal('modal-project');
 }
 
@@ -1039,6 +1048,21 @@ function deleteProject(id) {
   save();
 }
 
+function toggleProjectArchive(id) {
+  const proj = getProject(id);
+  if (!proj) return;
+  if (proj.archived) delete proj.archived;
+  else {
+    if (timerProjectId === id && data.runningEntry) { alert('This project has a running timer. Stop it before archiving.'); return; }
+    proj.archived = true;
+    if (timerProjectId === id) setTimerProject(null);
+  }
+  closeModal('modal-project');
+  renderAll();
+  renderSettings();
+  save();
+}
+
 // ── Project Picker ────────────────────────────────────────────────────────────
 function openProjectPicker(callback) {
   const list = document.getElementById('project-picker-list');
@@ -1046,7 +1070,7 @@ function openProjectPicker(callback) {
   search.value = '';
 
   function render(q) {
-    const filtered = data.projects.filter(p => !q || p.name.toLowerCase().includes(q));
+    const filtered = activeProjects().filter(p => !q || p.name.toLowerCase().includes(q));
     if (!filtered.length) { list.innerHTML = '<div class="empty-state">No projects found</div>'; return; }
 
     const byClient = {};
@@ -1764,7 +1788,9 @@ function renderClientsList() {
 function renderProjectsList() {
   const list = document.getElementById('projects-list');
   if (!data.projects.length) { list.innerHTML = '<div style="color:var(--text3);font-size:13px">No projects yet.</div>'; return; }
-  list.innerHTML = data.projects.map(p => {
+  const active = data.projects.filter(p => !p.archived);
+  const archived = data.projects.filter(p => p.archived);
+  const row = p => {
     const client = p.clientId ? getClient(p.clientId) : null;
     const { rate, currency } = getClientRate(p.id);
     const rateStr = rate ? `${currSym(currency)}${rate}/hr` : currency;
@@ -1773,7 +1799,11 @@ function renderProjectsList() {
       <span class="crud-name">${esc(p.name)}</span>
       <span class="crud-meta">${client ? esc(client.name) + ' · ' : ''}${esc(rateStr)}</span>
     </div>`;
-  }).join('');
+  };
+  list.innerHTML = (active.length ? active.map(row).join('') : '<div style="color:var(--text3);font-size:13px">No active projects.</div>') +
+    (archived.length
+      ? `<details class="crud-archived"><summary>🗄 Archived (${archived.length})</summary>${archived.map(row).join('')}</details>`
+      : '');
   list.querySelectorAll('.crud-item').forEach(item => {
     item.addEventListener('click', () => openProjectModal(item.dataset.project));
   });
@@ -1782,7 +1812,7 @@ function renderProjectsList() {
 // ── Favorites ─────────────────────────────────────────────────────────────────
 function renderFavorites() {
   const bar = document.getElementById('favorites-bar');
-  const favItems = data.favorites.map(fav => {
+  const favItems = data.favorites.filter(fav => !getProject(fav.projectId)?.archived).map(fav => {
     const p = getProject(fav.projectId);
     const color = getProjectColor(fav.projectId);
     return `<button class="fav-chip" data-fav="${fav.id}" style="border-color:${color}20">
@@ -2051,6 +2081,7 @@ function bindEvents() {
   document.getElementById('add-project-btn').addEventListener('click', () => openProjectModal(null));
   document.getElementById('project-save-btn').addEventListener('click', saveProject);
   document.getElementById('project-delete-btn').addEventListener('click', () => deleteProject(pendingProjectEdit));
+  document.getElementById('project-archive-btn').addEventListener('click', () => toggleProjectArchive(pendingProjectEdit));
 
   // Modal cancel buttons
   document.querySelectorAll('.modal-cancel[data-close]').forEach(btn => {
