@@ -10,22 +10,8 @@ Freelance time tracker with Dropbox sync. Tracks hours per project and client, g
 
 ## Quick Start
 
-### Option A — GitHub Pages (recommended, works from anywhere)
-
-Open **https://eyalbarmaimon.github.io/timetracker/** in any browser. No install needed.
-
-### Option B — Local server (for development / testing changes)
-
-The app is plain static files (no build step, no `package.json`). Serve the folder with any static server:
-
-```bash
-npx serve -l 3000
-# or: python -m http.server 3000
-# App runs at http://localhost:3000
-# Mobile on same Wi-Fi: http://<your-IP>:3000
-```
-
-> For Dropbox to work locally, `http://localhost:3000` must be listed in the Dropbox app's Redirect URIs (see below).
+Open **https://eyalbarmaimon.github.io/timetracker/** in any browser — phone or desktop. No install needed.
+On a phone, use the browser menu → *Add to Home Screen* to open it like an app.
 
 ### Running tests
 
@@ -41,7 +27,6 @@ node --test tests/
 2. **Create app** → Scoped access → App folder → Name it `TimeTracker`
 3. Under **OAuth 2 → Redirect URIs**, add:
    - `https://eyalbarmaimon.github.io/timetracker/` (with trailing slash)
-   - `http://localhost:3000` (for local server, optional)
 4. Copy the **App Key** (short ~15-char code — not the secret)
 5. In the app → **Settings** → paste the App Key → **Connect Dropbox**
 6. Authorize once — data syncs to `/ClaudeCode/timetracker_data.json` in your Dropbox
@@ -50,11 +35,13 @@ node --test tests/
 
 ## Multi-Device Sync
 
-Data syncs automatically between phone and desktop:
+Use the app on a phone and several computers at the same time — every device syncs through the same Dropbox file.
 
-- **On tab focus** — pulls latest data from Dropbox when you switch back to the tab
-- **Every 60 seconds** — background auto-pull
-- **Settings → ⟳ Sync Now** — manual pull button
+- **Merge, not overwrite** — each sync downloads the Dropbox file and merges it item by item (clients, projects, entries, expenses, invoices, favorites) with this device's changes. Edits made on different devices at the same time are all kept.
+- **Conflict-safe upload** — uploads are tied to the file revision; if another device wrote in between, the app re-downloads and merges again.
+- **Offline** — changes stay on the device and are merged in on the next successful sync.
+- **When it syncs** — on every save, on tab focus, every 60 seconds, and via *Settings → ⟳ Sync Now*.
+- If two devices edit the *same* item at the same moment, the device that syncs last wins for that item.
 
 > The timer is never interrupted by a sync pull.
 

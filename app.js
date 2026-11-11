@@ -12,7 +12,7 @@ const DEFAULT_DATA = {
   }
 };
 
-const APP_VERSION = '1.1.2';
+const APP_VERSION = '1.2.0';
 const CURRENCIES = ['ILS','USD','EUR','GBP','JPY','CHF','CAD','AUD','SEK','NOK','DKK','PLN','CZK','HUF','RON'];
 const CURRENCY_SYMBOLS = { ILS:'₪', USD:'$', EUR:'€', GBP:'£', JPY:'¥', CHF:'Fr', CAD:'CA$', AUD:'A$', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč', HUF:'Ft', RON:'lei' };
 const CATEGORY_ICONS = { travel:'✈', software:'💻', hardware:'🖥', hosting:'☁', food:'🍔', accommodation:'🏨', phone:'📱', other:'📦' };
@@ -30,7 +30,7 @@ let donutChart = null;
 let dropboxClient = null;
 let syncPending = false;
 let syncInProgress = false;
-let writeQueued = false;   // a write was requested while another sync was running
+let writeQueued = false;   // a sync was requested while another one was running
 let changeSeq = 0;         // bumps on every local change; guards reads from clobbering it
 let pendingEntryEdit = null;   // id being edited (null = new)
 let pendingExpenseEdit = null;
@@ -230,16 +230,9 @@ function loadLocal() {
   }
 }
 
-function isDirty() { return localStorage.getItem('timetracker_dirty') === '1'; }
-function setDirty(v) {
-  if (v) localStorage.setItem('timetracker_dirty', '1');
-  else localStorage.removeItem('timetracker_dirty');
-}
-
 async function save() {
   changeSeq++;
   saveLocal();
-  setDirty(true);
   await dropboxSync('write');
 }
 
@@ -341,50 +334,118 @@ async function handleDropboxCallback() {
   } catch { setSyncStatus('error', 'Auth failed'); }
 }
 
-async function dropboxSync(mode) {
+// ── Multi-device merge ───────────────────────────────────────────────────────
+// Several devices can edit at the same time. Instead of overwriting the whole
+// Dropbox file, every sync does a 3-way merge per item (by id):
+//   base   = what this device last synced (stored in localStorage)
+//   local  = this device's current data
+//   remote = what is in Dropbox now
+// An item changed/added/deleted locally since base → local version wins;
+// otherwise the remote version is taken. Upload uses the file revision, so if
+// another device wrote in between, we re-download and merge again.
+const DROPBOX_PATH = '/ClaudeCode/timetracker_data.json';
+const SYNC_COLLECTIONS = ['clients', 'projects', 'entries', 'expenses', 'invoices', 'favorites'];
+const DEVICE_SETTINGS = ['dropboxConnected', 'dropboxAppKey'];   // never taken from other devices
+
+function sameJSON(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+function clone(x) { return x === undefined ? undefined : JSON.parse(JSON.stringify(x)); }
+
+function loadSyncBase() {
+  try { return JSON.parse(localStorage.getItem('timetracker_base') || 'null'); } catch { return null; }
+}
+function saveSyncBase(b) {
+  try { localStorage.setItem('timetracker_base', JSON.stringify(b)); }
+  catch { localStorage.removeItem('timetracker_base'); }   // quota: fall back to safe union merge
+}
+
+// base === null means "no sync history": union of both, remote wins on overlap.
+function mergeList(baseList, localList, remoteList) {
+  const byId = l => new Map((l || []).map(x => [x.id, x]));
+  const B = baseList ? byId(baseList) : null, L = byId(localList), R = byId(remoteList);
+  const pick = id => {
+    const l = L.get(id);
+    const localChanged = B ? !sameJSON(l, B.get(id)) : (l !== undefined && !R.has(id));
+    return localChanged ? l : R.get(id);
+  };
+  const out = [], seen = new Set();
+  for (const x of (remoteList || [])) { seen.add(x.id); const v = pick(x.id); if (v) out.push(v); }
+  for (const x of (localList || []))  { if (seen.has(x.id)) continue; seen.add(x.id); const v = pick(x.id); if (v) out.push(v); }
+  return out;
+}
+
+function mergeValue(base, hasBase, local, remote) {
+  if (hasBase) return sameJSON(local, base) ? remote : local;
+  return remote !== undefined ? remote : local;
+}
+
+function mergeData(base, local, remote) {
+  const out = {};
+  const keys = new Set([...Object.keys(local || {}), ...Object.keys(remote || {})]);
+  keys.forEach(k => {
+    if (SYNC_COLLECTIONS.includes(k)) {
+      out[k] = mergeList(base ? (base[k] || []) : null, local[k], remote[k]);
+    } else if (k === 'settings') {
+      const ls = local.settings || {}, rs = remote.settings || {}, bs = base ? (base.settings || {}) : null;
+      const sk = new Set([...Object.keys(ls), ...Object.keys(rs)]);
+      out.settings = {};
+      sk.forEach(f => {
+        out.settings[f] = DEVICE_SETTINGS.includes(f) ? ls[f] : mergeValue(bs && bs[f], !!bs, ls[f], rs[f]);
+        if (out.settings[f] === undefined) delete out.settings[f];
+      });
+    } else {
+      out[k] = mergeValue(base && base[k], !!base, local[k], remote[k]);
+      if (out[k] === undefined) delete out[k];
+    }
+  });
+  SYNC_COLLECTIONS.forEach(k => { if (!out[k]) out[k] = []; });
+  return clone(out);
+}
+
+async function dropboxSync() {
   if (!dropboxClient) return;
-  if (syncInProgress) {
-    // Never drop a write: run it as soon as the current sync finishes
-    if (mode === 'write') writeQueued = true;
-    return;
-  }
-  // Unsynced local changes must be pushed before pulling, or the pull would erase them
-  if (mode === 'read' && isDirty()) mode = 'write';
+  if (syncInProgress) { writeQueued = true; return; }   // never drop a sync; run it right after
   syncInProgress = true;
   setSyncStatus('loading');
   const seqAtStart = changeSeq;
+  const localAtStart = clone(data);
   try {
-    if (mode === 'read') {
-      const resp = await dropboxClient.filesDownload({ path: '/ClaudeCode/timetracker_data.json' });
-      const text = await resp.result.fileBlob.text();
-      const remote = JSON.parse(text);
-      // A local change happened while downloading — keep it; the queued write will push it
-      if (changeSeq === seqAtStart && !isDirty()) {
-        data = Object.assign(JSON.parse(JSON.stringify(DEFAULT_DATA)), remote);
-        saveLocal();
-        renderAll();
-        renderSettings();
+    for (let attempt = 0; ; attempt++) {
+      let remote = null, rev = null;
+      try {
+        const resp = await dropboxClient.filesDownload({ path: DROPBOX_PATH });
+        remote = JSON.parse(await resp.result.fileBlob.text());
+        rev = resp.result.rev || null;
+      } catch (e) {
+        if (!(e && e.status === 409)) throw e;   // 409 on download = file does not exist yet
       }
-    } else {
-      const content = JSON.stringify(data, null, 2);
-      await dropboxClient.filesUpload({
-        path: '/ClaudeCode/timetracker_data.json',
-        contents: content,
-        mode: { '.tag': 'overwrite' }
-      });
-      if (changeSeq === seqAtStart) setDirty(false);
+      const merged = remote ? mergeData(loadSyncBase(), localAtStart, remote) : clone(localAtStart);
+      if (!remote || !sameJSON(merged, remote)) {
+        try {
+          await dropboxClient.filesUpload({
+            path: DROPBOX_PATH,
+            contents: JSON.stringify(merged, null, 2),
+            mode: rev ? { '.tag': 'update', update: rev } : { '.tag': 'add' }
+          });
+        } catch (e) {
+          // 409 on upload = another device wrote since our download → merge again
+          if (e && e.status === 409 && attempt < 3) continue;
+          throw e;
+        }
+      }
+      saveSyncBase(merged);
+      // Keep edits made on this device while the sync was running
+      const next = changeSeq === seqAtStart ? merged : mergeData(localAtStart, data, merged);
+      if (changeSeq !== seqAtStart) writeQueued = true;
+      const changed = !sameJSON(next, data);
+      data = Object.assign(clone(DEFAULT_DATA), next);
+      saveLocal();
+      if (changed) { renderAll(); renderSettings(); }
+      break;
     }
+    syncPending = false;
     setSyncStatus('ok');
   } catch (e) {
-    if (e && e.status === 409) {
-      // File not found — create it
-      try {
-        const content = JSON.stringify(data, null, 2);
-        await dropboxClient.filesUpload({ path: '/ClaudeCode/timetracker_data.json', contents: content, mode: { '.tag': 'add' } });
-        if (changeSeq === seqAtStart) setDirty(false);
-        setSyncStatus('ok');
-      } catch { setSyncStatus('error'); }
-    } else if (e && (e.status === 401 || e.status === 400)) {
+    if (e && (e.status === 401 || e.status === 400)) {
       // Token expired and could not be refreshed — force reconnect
       localStorage.removeItem('dropbox_token');
       localStorage.removeItem('dropbox_refresh_token');
@@ -403,7 +464,7 @@ async function dropboxSync(mode) {
   }
   if (writeQueued && dropboxClient) {
     writeQueued = false;
-    await dropboxSync('write');
+    await dropboxSync();
   }
 }
 

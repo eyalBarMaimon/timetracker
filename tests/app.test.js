@@ -155,6 +155,9 @@ const factory = new Function(
   __nsExport.getSyncInProgress   = () => syncInProgress;
   __nsExport.setSyncInProgress   = v  => { syncInProgress = v; };
   __nsExport.setDropboxClient    = v  => { dropboxClient  = v; };
+  __nsExport.mergeData           = mergeData;
+  __nsExport.bumpChangeSeq       = () => { changeSeq++; };
+  __nsExport.resetSyncQueue      = () => { writeQueued = false; };
 `);
 
 factory(
@@ -176,6 +179,7 @@ const {
   setReportRange, setReportMode, setReportFilters,
   setReportInvoiceId, setPendingInvoiceId,
   dropboxSync, getSyncInProgress, setSyncInProgress, setDropboxClient,
+  mergeData, bumpChangeSeq, resetSyncQueue,
 } = ns;
 
 // ─── test helpers ─────────────────────────────────────────────────────────────
@@ -710,6 +714,7 @@ describe('dropboxSync()', () => {
     freshData();
     setSyncInProgress(false);
     setDropboxClient(null);
+    resetSyncQueue();
   });
 
   test('skipped when no dropboxClient', async () => {
@@ -732,7 +737,7 @@ describe('dropboxSync()', () => {
     getData().settings.dropboxAppKey = 'testkey';
     _localStorage.setItem('dropbox_token', 'fake-token');
     const err = Object.assign(new Error('Unauthorized'), { status: 401 });
-    setDropboxClient({ filesUpload: async () => { throw err; } });
+    setDropboxClient({ filesDownload: async () => { throw err; }, filesUpload: async () => { throw err; } });
     setDoc({
       'dropbox-connect-btn':    nullEl(),
       'dropbox-disconnect-btn': nullEl(),
@@ -744,20 +749,146 @@ describe('dropboxSync()', () => {
     assert.equal(getSyncInProgress(), false);
   });
 
-  test('syncInProgress resets to false after 409 (file not found → create)', async () => {
+  test('remote file missing (409 on download) -> created with add mode', async () => {
     const notFound = Object.assign(new Error('not_found'), { status: 409 });
-    let uploadCalls = 0;
+    const modes = [];
     setDropboxClient({
-      filesUpload: async ({ mode }) => {
-        uploadCalls++;
-        if (uploadCalls === 1) throw notFound;
-        // Second call (add mode) succeeds
-      },
+      filesDownload: async () => { throw notFound; },
+      filesUpload:   async ({ mode }) => { modes.push(mode['.tag']); },
     });
     setDoc({ 'sync-status': nullEl() });
     await dropboxSync('write');
     assert.equal(getSyncInProgress(), false);
-    assert.equal(uploadCalls, 2, 'should retry with add mode on 409');
+    assert.deepEqual(modes, ['add']);
+  });
+});
+
+// =============================================================================
+// 8b. MULTI-DEVICE SYNC - 3-way merge, no lost edits
+// =============================================================================
+function clone(x) { return JSON.parse(JSON.stringify(x)); }
+
+function fakeDropbox(initial) {
+  const store = { file: initial ? JSON.stringify(initial) : null, rev: 1 };
+  store.client = {
+    filesDownload: async () => {
+      if (store.file === null) throw Object.assign(new Error('nf'), { status: 409 });
+      const text = store.file, rev = String(store.rev);
+      return { result: { rev, fileBlob: { text: async () => text } } };
+    },
+    filesUpload: async ({ contents, mode }) => {
+      if (mode['.tag'] === 'update' && mode.update !== String(store.rev))
+        throw Object.assign(new Error('conflict'), { status: 409 });
+      store.file = contents; store.rev++;
+    },
+  };
+  store.json = () => JSON.parse(store.file);
+  return store;
+}
+
+describe('mergeData() - 3-way merge', () => {
+  const base = { clients: [{ id: 'c1', name: 'A' }, { id: 'c2', name: 'B' }], settings: { fxMarkup: 4 } };
+
+  test('additions on both sides are kept', () => {
+    const local  = { clients: [...base.clients, { id: 'L', name: 'local' }],  settings: { fxMarkup: 4 } };
+    const remote = { clients: [...base.clients, { id: 'R', name: 'remote' }], settings: { fxMarkup: 4 } };
+    const ids = mergeData(base, local, remote).clients.map(c => c.id).sort();
+    assert.deepEqual(ids, ['L', 'R', 'c1', 'c2']);
+  });
+
+  test('remote deletion is applied when not edited locally', () => {
+    const remote = { clients: [base.clients[0]], settings: { fxMarkup: 4 } };
+    assert.deepEqual(mergeData(base, clone(base), remote).clients.map(c => c.id), ['c1']);
+  });
+
+  test('local deletion is applied', () => {
+    const local = { clients: [base.clients[1]], settings: { fxMarkup: 4 } };
+    assert.deepEqual(mergeData(base, local, clone(base)).clients.map(c => c.id), ['c2']);
+  });
+
+  test('edits to different items on each device both survive', () => {
+    const local  = clone(base); local.clients[0].name  = 'A-local';
+    const remote = clone(base); remote.clients[1].name = 'B-remote';
+    assert.deepEqual(mergeData(base, local, remote).clients.map(c => c.name), ['A-local', 'B-remote']);
+  });
+
+  test('settings merge per field', () => {
+    const local  = clone(base); local.settings.fxMarkup = 6;
+    const remote = clone(base); remote.settings.weekStartDay = 'monday';
+    const m = mergeData(base, local, remote);
+    assert.equal(m.settings.fxMarkup, 6);
+    assert.equal(m.settings.weekStartDay, 'monday');
+  });
+
+  test('no sync history -> union, remote wins on overlap', () => {
+    const local  = { clients: [{ id: 'c1', name: 'stale' }, { id: 'L', name: 'new' }] };
+    const remote = { clients: [{ id: 'c1', name: 'fresh' }] };
+    assert.deepEqual(mergeData(null, local, remote).clients.map(c => c.name), ['fresh', 'new']);
+  });
+});
+
+describe('dropboxSync() - two devices editing at the same time', () => {
+  beforeEach(() => { _localStorage.clear(); freshData(); setSyncInProgress(false); resetSyncQueue(); setDoc({ 'sync-status': nullEl() }); });
+
+  test('client added on device A and project added on device B both end up in Dropbox', async () => {
+    const start = Object.assign(getDefaultData(), { clients: [{ id: 'c0', name: 'Old' }] });
+    const dbx = fakeDropbox(start);
+    setDropboxClient(dbx.client);
+
+    // Device A: syncs, then adds a client (not uploaded yet)
+    setData(clone(start));
+    await dropboxSync('read');
+    const baseA = _localStorage.getItem('timetracker_base');
+    getData().clients.push({ id: 'cA', name: 'New client' });
+    bumpChangeSeq();
+    const deviceA = clone(getData());
+
+    // Device B (same starting point) adds a project and uploads first
+    setData(clone(start));
+    getData().projects.push({ id: 'pB', name: 'New project', clientId: 'c0' });
+    bumpChangeSeq();
+    await dropboxSync('write');
+
+    // Device A now uploads its change
+    _localStorage.setItem('timetracker_base', baseA);
+    setData(deviceA);
+    await dropboxSync('write');
+
+    const final = dbx.json();
+    assert.deepEqual(final.clients.map(c => c.id).sort(), ['c0', 'cA']);
+    assert.deepEqual(final.projects.map(p => p.id), ['pB']);
+    assert.deepEqual(getData().projects.map(p => p.id), ['pB'], 'device A also sees B\'s project');
+  });
+
+  test('upload conflict (other device wrote in between) -> re-merge, nothing lost', async () => {
+    const dbx = fakeDropbox(getDefaultData());
+    setDropboxClient(dbx.client);
+    await dropboxSync('read');
+    const realUpload = dbx.client.filesUpload;
+    let injected = false;
+    dbx.client.filesUpload = async (args) => {
+      if (!injected) {
+        injected = true;
+        const other = dbx.json(); other.clients.push({ id: 'other', name: 'Other device' });
+        dbx.file = JSON.stringify(other); dbx.rev++;
+      }
+      return realUpload(args);
+    };
+    getData().clients.push({ id: 'mine', name: 'This device' });
+    bumpChangeSeq();
+    await dropboxSync('write');
+    assert.deepEqual(dbx.json().clients.map(c => c.id).sort(), ['mine', 'other']);
+  });
+
+  test('auto-pull does not erase a local change that was not uploaded yet', async () => {
+    const dbx = fakeDropbox(getDefaultData());
+    setDropboxClient(dbx.client);
+    await dropboxSync('read');
+    getData().clients.push({ id: 'unsynced', name: 'Pending' });
+    bumpChangeSeq();
+    await dropboxSync('read');
+    assert.ok(getData().clients.some(c => c.id === 'unsynced'));
+    assert.ok(dbx.json().clients.some(c => c.id === 'unsynced'));
   });
 });
 
